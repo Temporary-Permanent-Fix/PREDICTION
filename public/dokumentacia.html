@@ -1,0 +1,388 @@
+<!DOCTYPE html><html lang="sk"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predikcia — dokumentácia modelu</title>
+<style>
+:root {
+  --bg:#111111; --card:#171717; --border:#262626; --border2:#333;
+  --text:#ececec; --muted:#9a9a9a; --lime:#36b323; --green2:#00b84a; --amber:#d29922;
+  --mono: ui-monospace,"SF Mono","Cascadia Mono",Menlo,monospace;
+  --sans: "Inter",-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.65;font-size:15px}
+.wrap{max-width:960px;margin:0 auto;padding:28px 20px 80px}
+header{border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,#181818,#131313);padding:22px 26px 20px;margin-bottom:22px}
+.eyebrow{font-size:11.5px;letter-spacing:2.2px;text-transform:uppercase;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green2)}
+h1{font-size:30px;font-weight:800;margin:8px 0 0;letter-spacing:.2px;display:inline-block;padding-bottom:9px;position:relative}
+h1::after{content:"";position:absolute;left:0;bottom:0;width:64px;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--lime),var(--green2))}
+.tagline{color:var(--muted);font-size:13.5px;margin-top:8px}
+nav{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 22px;margin-bottom:26px}
+nav h3{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 8px}
+nav ul{margin:0;padding-left:18px;columns:2;column-gap:32px;list-style:none}
+nav li{margin:3px 0}
+nav a{color:var(--text);text-decoration:none;font-size:13.5px}
+nav a:hover{color:var(--green2)}
+h2{font-size:20px;font-weight:700;margin:36px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--border2)}
+h3{font-size:15.5px;font-weight:650;margin:24px 0 8px;color:#dcdcdc}
+p{margin:10px 0}
+strong{color:#fff;font-weight:650}
+code{font-family:var(--mono);font-size:13px;background:#0d0d0d;border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:var(--green2)}
+pre{background:#0d0d0d;border:1px solid var(--border);border-left:3px solid var(--lime);border-radius:10px;padding:14px 18px;overflow-x:auto;margin:14px 0}
+pre code{background:none;border:0;padding:0;color:var(--text);font-size:13px;line-height:1.7}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border2);padding:8px 10px;font-weight:600}
+td{padding:7px 10px;border-bottom:1px solid #1f1f1f;font-variant-numeric:tabular-nums}
+tr:hover td{background:#17171799}
+ul,ol{padding-left:22px}
+li{margin:5px 0}
+hr{border:0;border-top:1px solid var(--border);margin:32px 0}
+a{color:var(--green2)}
+@media(max-width:700px){nav ol{columns:1} h1{font-size:23px} .wrap{padding:16px 12px 60px}}
+@media print{
+  body,html{background:#fff} *{color:#111 !important}
+  header{background:#fff;border-color:#ccc} nav{display:none}
+  pre,code{background:#f6f6f6;border-color:#ddd} pre code{color:#111 !important}
+  h2{page-break-after:avoid} table,pre{page-break-inside:avoid}
+}
+</style></head><body><div class="wrap">
+<header><div class="eyebrow"><span class="dot"></span>ALZA LOG · SKLC3 · CZLC4 · LCU</div>
+<h1>Predikcia</h1><div class="tagline">Dokumentácia modelu a logiky výpočtov · stav k 11. 8. 2026</div></header>
+<nav><h3>Obsah</h3><ul><li><a href="#1-zakladne-pojmy">1. Základné pojmy</a></li>
+<li><a href="#2-predikcny-model">2. Predikčný model</a></li>
+<li><a href="#3-presnost">3. Presnosť</a></li>
+<li><a href="#4-matica-zvozov">4. Matica zvozov</a></li>
+<li><a href="#5-zataz-dna">5. Perfo</a></li>
+<li><a href="#6-upozornenia">6. Upozornenia</a></li>
+<li><a href="#7-anomalie-a-vynimky">7. Anomálie a výnimky</a></li>
+<li><a href="#8-kapacitny-prepocet">8. Kapacitný prepočet</a></li>
+<li><a href="#9-kvalita">9. Kvalita</a></li>
+<li><a href="#10-prahy-zobrazenia">10. Prahy zobrazenia</a></li>
+<li><a href="#11-struktura-appky">11. Štruktúra appky</a></li>
+<li><a href="#12-datove-subory">12. Dátové súbory</a></li>
+<li><a href="#pobocky">14. Pobočky</a></li>
+<li><a href="#odpracovane">15. Odpracované hodiny</a></li>
+<li><a href="#avizo">16. Avíza dodávok</a></li>
+<li><a href="#13-zname-obmedzenia">13. Známe obmedzenia</a></li></ul></nav>
+<h2 id="1-zakladne-pojmy">1. Základné pojmy</h2>
+<p><strong>Prevádzkový deň</strong> je 06:00 → 06:00 nasledujúceho kalendárneho dňa. Hodiny 00:00–05:59 patria k predchádzajúcemu dňu. Posledný deň sa vyhodí, ak nemá nočné hodiny.</p>
+<p>Pri <strong>triedení</strong> je to zásadné — nočná špička 20:00–03:00 tvorí väčšinu objemu, takže ten istý deň počítaný od polnoci vychádza úplne inak.</p>
+<p><strong>Zdroje dát</strong> — tri nezávislé rady, každá s vlastným modelom:</p>
+<table>
+<thead>
+<tr>
+<th>Zdroj</th>
+<th>Čo obsahuje</th>
+<th>Pôvod</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vzniky</td>
+<td>zákaznícke objednávky (Expedice)</td>
+<td>OLAP export</td>
+</tr>
+<tr>
+<td>Triedenie</td>
+<td>Výtlak | 6. Sorted</td>
+<td>VOLUMES export</td>
+</tr>
+<tr>
+<td>Príjem</td>
+<td>Výtlak | 1. Received</td>
+<td>VOLUMES export</td>
+</tr>
+</tbody>
+</table>
+<p>Distribúcia (preposielanie medzi skladmi) sa už nesleduje ako samostatný zdroj — nikto podľa nej neplánuje. Vstupuje do Perfa ako práca navyše.</p>
+<p><strong>Priorita dát.</strong> Ručne zadané hodnoty sú provizórium pre aktuálny deň. Platia len pre dni, ktoré import zatiaľ nepokrýva — ranný import ich automaticky nahradí bez nutnosti čokoľvek mazať.</p>
+<hr />
+<h2 id="2-predikcny-model">2. Predikčný model</h2>
+<pre><code>predikcia = úroveň s tlmeným trendom
+          × faktor dňa v týždni
+          × faktor dňa v mesiaci
+          × koeficient udalostí
+          × krátkodobá korekcia
+</code></pre>
+<p>Pred výpočtom sa odstránia dni s výnimkou a hodnoty sa vydelia koeficientom udalostí, aby promo neskreslilo sezónnosť.</p>
+<h3 id="21-faktor-dna-v-tyzdni">2.1 Faktor dňa v týždni</h3>
+<p>Medián posledných <strong>56 dní</strong> pre každý deň, delený celkovým mediánom, orezaný na 0,6–1,4.</p>
+<table>
+<thead>
+<tr>
+<th>Po</th>
+<th>Ut</th>
+<th>St</th>
+<th>Št</th>
+<th>Pi</th>
+<th>So</th>
+<th>Ne</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1,159</td>
+<td>1,084</td>
+<td>1,105</td>
+<td>1,074</td>
+<td>0,948</td>
+<td>0,850</td>
+<td>0,944</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-faktor-dna-v-mesiaci">2.2 Faktor dňa v mesiaci</h3>
+<p>Výplatné výkyvy. Reziduál po odstránení dňa v týždni, normalizovaný v rámci mesiaca, medián pre každý deň 1–31, interpolácia dier, vyhladenie kĺzavým priemerom z troch dní, orezanie na 0,8–1,25. Rozsah 0,867–1,056.</p>
+<h3 id="23-uroven-a-tlmeny-trend">2.3 Úroveň a tlmený trend</h3>
+<p>Vážená lineárna regresia na posledných <strong>42 dňoch</strong> (váhy 0,3 → 1,0). Trend sa tlmí koeficientom <strong>0,977 na deň</strong>:</p>
+<pre><code>trend(D+n) = smernica × 0,977ⁿ × n
+</code></pre>
+<h3 id="24-koeficient-udalosti">2.4 Koeficient udalostí</h3>
+<table>
+<thead>
+<tr>
+<th>Udalosť</th>
+<th>Koeficient</th>
+<th>Odvodené z</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Alza dni</td>
+<td>1,05</td>
+<td>log-lineárna regresia, promo kalendár feb–jún 2026 (R² = 0,935)</td>
+</tr>
+<tr>
+<td>Black Friday</td>
+<td>1,36</td>
+<td>BF víkend 2025 vs. okolité týždne</td>
+</tr>
+<tr>
+<td>Mega zľavy</td>
+<td>1,00</td>
+<td>merateľný efekt sa nepotvrdil</td>
+</tr>
+<tr>
+<td>AlzaPlus+ zľavy</td>
+<td>1,00</td>
+<td>detto</td>
+</tr>
+<tr>
+<td>Výplatný termín</td>
+<td>1,04</td>
+<td>priemer faktorov dní 10.–16.</td>
+</tr>
+<tr>
+<td>Sviatok</td>
+<td>0,71</td>
+<td>medián prepadu anomálnych dní</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-kratkodoba-korekcia">2.5 Krátkodobá korekcia</h3>
+<p>Medián pomeru skutočnosť ÷ model za posledných <strong>5 dní</strong>, orezaný na 0,85–1,20. Do budúcnosti sa vytráca koeficientom <strong>0,93 na deň</strong>.</p>
+<h3 id="26-retrospektivne-ocakavanie">2.6 Retrospektívne očakávanie</h3>
+<p>Pre minulé dni sa používa kĺzavý medián deseasonalizovanej úrovne z okna ±14 dní, nie dnešná predikcia premietnutá späť.</p>
+<h3 id="27-interval-spolahlivosti">2.7 Interval spoľahlivosti</h3>
+<p>80 % interval = predikcia × (1 ± 1,28 × residStd), kde residStd je rezíduálna odchýlka voči retrospektívnemu očakávaniu.</p>
+<hr />
+<h2 id="3-presnost">3. Presnosť</h2>
+<p>Walk-forward backtest (model trénovaný len na dátach do predchádzajúceho dňa), posledných 30 dní:</p>
+<table>
+<thead>
+<tr>
+<th>Zdroj</th>
+<th>MAPE</th>
+<th>MAE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vzniky</td>
+<td>5,7 %</td>
+<td>3 995</td>
+</tr>
+<tr>
+<td>Triedenie</td>
+<td>6,2 %</td>
+<td>4 263</td>
+</tr>
+<tr>
+<td>Príjem</td>
+<td>21,1 %</td>
+<td>1 154</td>
+</tr>
+</tbody>
+</table>
+<p>Vysoké MAPE pri príjme nie je chyba modelu — príjem riadi harmonogram dodávok, nie dopyt. Zlepšenie by priniesli až avíza (ASN).</p>
+<hr />
+<h2 id="4-matica-zvozov">4. Matica zvozov</h2>
+<p>Z OLAP exportu sa pre každú hodinu vzniku počíta: <strong>expFrac</strong> (podiel, ktorý reálne odíde, 0,92–0,995), <strong>d0–d3</strong> (rozdelenie podľa odstupu v prevádzkových dňoch), <strong>slotMap</strong> (cieľové zvozové sloty) a <strong>harmonogram</strong> (hodiny odchodov podľa dňa v týždni).</p>
+<p>Vážené rozdelenie: <strong>D0 = 18,8 %, D1 = 63,3 %, D2 = 11,6 %, D3+ = 6,3 %</strong>. Podiel D0 silno závisí od hodiny vzniku — ranná objednávka (6–8 h) má ~45 % šancu odísť v ten istý deň, večerná (22 h) len 2 %.</p>
+<p><strong>Plán vs. realita:</strong> presne podľa plánu odíde 10 % objemu, 48 % má sklz ~24 hodín, 62 % drží hodinu slotu o deň neskôr.</p>
+<hr />
+<h2 id="5-zataz-dna">5. Perfo</h2>
+<pre><code>záťaž(D) = Σ(k = 0..3) vzniky(D−k) × hodinový profil × expFrac × d_k  +  potvrdený backlog
+</code></pre>
+<p>Pre D−1 až D−3 sú vzniky známe, odhaduje sa len D0 (~19 %). Ráno je teda ~81 % dennej práce deterministicky známych.</p>
+<p><strong>Overenie:</strong> 15. 7. odhad 81 130 vs. realita 83 513 (−2,9 %), 16. 7. odhad 79 687 vs. 81 154 (−1,8 %).</p>
+<p>Záložka obsahuje aj hodinový profil odchodov zvozov a 7-dňový výhľad.</p>
+<hr />
+<h2 id="6-upozornenia">6. Upozornenia</h2>
+<p>Sleduje sa <strong>kumulatívny výtlak triedenia</strong> od začiatku prevádzkového dňa proti plánu (modelová predikcia × kumulatívny hodinový profil). Jednotlivé hodiny kolíšu kvôli dávkovému triedeniu, preto sa neporovnávajú samostatne — porovnanie po hodinách hlásilo poplach každý deň.</p>
+<p><strong>Prah:</strong> deficit musí prekročiť obe hodnoty naraz — relatívnu (predvolene 10 %) aj absolútnu (2 000 JBL). Nastaviteľné v zaheslovaných Výkonoch.</p>
+<p><strong>Dve úrovne:</strong></p>
+<ul>
+<li><strong>Žlté — riziko kvality.</strong> Deficit sa dá dobehnúť do konca dňa (porovnáva sa s voľnou kapacitou zostávajúcich hodín, počítanou ako p90 historického hodinového výtlaku nad plán). Jobline prekročia limit triedenia, ale zvoz stihnú.</li>
+<li><strong>Červené — presun objemu.</strong> Deficit presahuje voľnú kapacitu, objem sa nestihne a presúva sa na ďalší deň.</li>
+</ul>
+<p><strong>Potvrdzovanie.</strong> Červené upozornenie vznikne v stave <em>návrh</em> a nikam sa nezapočíta. Po potvrdení sa zapíše do <code>backlog.csv</code> a pripočíta k záťaži a hodinám cieľového dňa. Možnosti: Potvrdiť / Zamietnuť / Vrátiť.</p>
+<p>Upozornenia sa <strong>odvodzujú zo súčasných dát</strong>, neukladajú sa. Ak ranný import prepíše ručne zadané hodiny, neplatné upozornenia zmiznú samy; potvrdené zostávajú.</p>
+<p><strong>Obmedzenie:</strong> appka zatiaľ nepozná limity triedenia (LT) ani časy zvozu (ČS) po jednotlivých zvozoch, preto rozlišuje žlté a červené podľa kapacity, nie podľa konkrétneho limitu. Po doplnení LT a ČS do OLAP exportu bude rozlíšenie presné — nekvalita (prekročený LT, ale odišlo) vs. reálny presun (zmeškaný ČS).</p>
+<hr />
+<h2 id="7-anomalie-a-vynimky">7. Anomálie a výnimky</h2>
+<p>Detekcia odchýlky skutočnosti od retrospektívneho očakávania nad zvolený prah. Slúži na <strong>evidenciu dôvodov</strong>, prečo bol deň iný — presun objemu rieši sekcia Upozornenia.</p>
+<p><strong>Hodinové výnimky:</strong> anomália sa dá obmedziť na konkrétne hodiny. Deň sa potom z tréningu nevyhadzuje — postihnuté hodiny sa dopočítajú:</p>
+<pre><code>clean = nepostihnuté / (1 − podiel postihnutých hodín)
+</code></pre>
+<p>Ak deň nemá hodinové dáta alebo je postihnutých viac ako 85 % objemu, vylúči sa celý.</p>
+<hr />
+<h2 id="8-kapacitny-prepocet">8. Kapacitný prepočet</h2>
+<pre><code>človekohodiny = objem ÷ výkon (JBL na osobu a hodinu)
+</code></pre>
+<p>Výkony sa zadávajú v zaheslovaných Výkonoch — plošné a zvlášť úprava pre konkrétny deň (denná má prednosť). Objemy procesov sa odvodzujú z triedenia cez pomery z posledných 60 dní: Pick ×1,010, Pack ×1,009, Sort ×1,000, Príjem samostatne.</p>
+<p>Prepočet na ľudí: čistý pracovný čas <strong>11 hodín na zmenu, 2 zmeny denne</strong>.</p>
+<hr />
+<h2 id="9-kvalita">9. Kvalita</h2>
+<p>Kvalita = podiel jobline dokončených v limite. <strong>Všetky agregáty sú priemerom denných kvalít</strong>, nie podielom z celkového objemu.</p>
+<p>Skratky: <strong>ČS</strong> = čas zvozu, <strong>LT</strong> = limit triedenia, <strong>DLT</strong> = limit odoslania.</p>
+<p><strong>Rozpad podľa zmien</strong> priraďuje hodinovú kvalitu k operation managerovi cez kalendár zmien (denná 06:00–17:59, nočná 18:00–05:59). Stĺpec <em>Rozptyl</em> ukazuje rozdiel medzi najlepšou a najhoršou zmenou.</p>
+<p>Obmedzenie: rozpad je nevážený objemom a nezohľadňuje rozdielnu náročnosť dní. Na porovnávanie ľudí je orientačný, nie hodnotiaci.</p>
+<hr />
+<h2 id="10-prahy-zobrazenia">10. Prahy zobrazenia</h2>
+<p>Nastaviteľné v zaheslovaných Výkonoch:</p>
+<ul>
+<li><strong>Kvalita:</strong> zelená od 99 %, jantárová od 98 %, pod tým červená</li>
+<li><strong>Hodiny:</strong> zelená do 105 % normy, jantárová do 115 % (pomer spálené ÷ potrebné)</li>
+<li><strong>Upozornenia:</strong> minimálne zaostanie 10 % a 2 000 JBL zároveň</li>
+</ul>
+<hr />
+<h2 id="11-struktura-appky">11. Štruktúra appky</h2>
+<p><strong>Zdroje</strong> (Vzniky / Triedenie / Príjem) — každý má Predikciu, Zadávanie dát a Anomálie.</p>
+<p><strong>Samostatné sekcie:</strong> Prehľad (denný manažérsky report s exportom a rozposlaním), Upozornenia, Perfo, Kvalita, Zmeny, Udalosti, Výkony (heslo), Model, Dáta (import).</p>
+<hr />
+<h2 id="12-datove-subory">12. Dátové súbory</h2>
+<table>
+<thead>
+<tr>
+<th>Súbor</th>
+<th>Obsah</th>
+<th>Zdroj</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vzniky_hodinove.csv</code></td>
+<td>zákaznícke vzniky</td>
+<td>import OLAP</td>
+</tr>
+<tr>
+<td><code>distribucia_hodinove.csv</code></td>
+<td>distribúcia</td>
+<td>import OLAP</td>
+</tr>
+<tr>
+<td><code>zvoz_matica.json</code></td>
+<td>matica, sloty, harmonogram</td>
+<td>import OLAP</td>
+</tr>
+<tr>
+<td><code>baseline_hodinove.csv</code></td>
+<td>triedenie</td>
+<td>import VOLUMES</td>
+</tr>
+<tr>
+<td><code>prijem_hodinove.csv</code></td>
+<td>príjem</td>
+<td>import VOLUMES</td>
+</tr>
+<tr>
+<td><code>procesy_pomery.json</code></td>
+<td>pomery procesov</td>
+<td>import VOLUMES</td>
+</tr>
+<tr>
+<td><code>kvalita_denne.csv</code>, <code>kvalita_hodinove.csv</code>, <code>kvalita_hodiny.json</code></td>
+<td>kvalita</td>
+<td>import QUALITY</td>
+</tr>
+<tr>
+<td><code>zmeny.csv</code></td>
+<td>kalendár zmien</td>
+<td>import Excel rozpisu</td>
+</tr>
+<tr>
+<td><code>manazeri.csv</code></td>
+<td>skratka → meno</td>
+<td>ručne</td>
+</tr>
+<tr>
+<td><code>zaznamy.csv</code></td>
+<td>ručne zadané dni a hodiny</td>
+<td>appka</td>
+</tr>
+<tr>
+<td><code>vynimky.csv</code>, <code>udalosti.csv</code></td>
+<td>výnimky a promo</td>
+<td>appka</td>
+</tr>
+<tr>
+<td><code>upozornenia.csv</code></td>
+<td>stavy upozornení</td>
+<td>appka</td>
+</tr>
+<tr>
+<td><code>backlog.csv</code></td>
+<td>potvrdený prenos objemu</td>
+<td>appka</td>
+</tr>
+<tr>
+<td><code>kpi.csv</code>, <code>prahy.csv</code>, <code>emaily.csv</code></td>
+<td>nastavenia</td>
+<td>appka (heslo)</td>
+</tr>
+</tbody>
+</table>
+<p>Import prepisuje súbory celé. Pri importe sa dá zaškrtnúť vyčistenie ručne zadaných dát; nastavenia zostávajú.</p>
+<hr />
+<h2 id="pobocky">14. Pobočky</h2>
+<p>Appka obsluhuje viac pobočiek (SKLC3, CZLC4, LCU, ďalšie sa dajú pridať). <strong>Model, vzorce aj parametre sú pre všetky pobočky identické</strong> — líšia sa len dáta, teda objemy, hodinové profily, matica zvozov, výkony procesov a kalendár zmien. Každá pobočka si teda vytrénuje vlastnú úroveň, sezónnosť aj zvozové podiely z vlastnej histórie.</p>
+<p>Dáta sú oddelené v priečinkoch <code>public/data/&lt;POBOČKA&gt;/</code>. Prepínač je v hlavičke a voľba sa pamätá v prehliadači. Nastavenia chránené heslom (výkony, prahy, príjemcovia) sú tiež per pobočku, takže sa dajú nastaviť odlišné normy aj limity.</p>
+<p>Zoznam pobočiek je v <code>public/data/pobocky.csv</code>. Pri pridaní novej stačí doplniť riadok a založiť priečinok s prázdnymi súbormi; kým sa nenahrajú exporty, appka zobrazí výzvu na import namiesto chyby.</p>
+<p><strong>Hodnoty uvedené v tejto dokumentácii</strong> (faktory dní, koeficienty udalostí, podiely D0–D3, presnosť modelu) pochádzajú z dát SKLC3. Pre ostatné pobočky budú iné — metodika ich výpočtu je však rovnaká a appka ich prepočíta automaticky z nahratých dát.</p>
+
+<h2 id="odpracovane">15. Odpracované hodiny</h2>
+<p>Výkaz SJL ManHours poskytuje denné odpracované hodiny po procesoch (Pack, Pick, Potvrdenie, Príjem, Sort). Importuje sa rovnako ako ostatné exporty a ukladá do <code>manhours.csv</code>.</p>
+<p>V sekcii <strong>Perfo</strong> sa porovnávajú s potrebnými hodinami:</p>
+<pre><code>pomer = odpracované ÷ potrebné × 100
+potrebné = objem procesu ÷ výkon (JBL na osobu a hodinu)</code></pre>
+<p>Farby podľa prahov (predvolene zelená do 105 %, jantárová do 115 %). Porovnanie je aj po jednotlivých procesoch vrátane rozdielu v hodinách. Dáta sú dostupné od 28. 2. 2026 — staršie obdobie sa porovnať nedá.</p>
+
+<h2 id="avizo">16. Avíza dodávok</h2>
+<p>Export „Vyložených palet a plán" obsahuje denný plán a skutočnosť vyložených paliet po pobočkách. Importuje sa ako ostatné exporty a <strong>rozdelí sa automaticky podľa pobočiek</strong> (aktuálne sa importujú SKLC3, CZLC4 a LCU).</p>
+<p>Predikcia príjmu z avíz:</p>
+<pre><code>predikcia = plán paliet × medián (skutočný príjem ÷ plán) za posledných 30 dní</code></pre>
+<p>Koeficient sa priebežne prepočítava, takže sa prispôsobuje skladbe tovaru. V záložke Príjem sa zobrazuje ako samostatná karta vedľa modelovej predikcie — nenahrádza ju, dopĺňa.</p>
+<p><strong>Overenie (42 dní, walk-forward):</strong> sezónny model 24,0 % MAPE, predikcia z plánu paliet <strong>21,4 %</strong>, kombinácia 21,6 %. Zlepšenie je reálne, ale nie zásadné — na paletu pripadá medián 13 jobline s veľkým rozptylom (paleta bielej techniky verzus paleta drobného tovaru). Korelácia plánu s objemom príjmu je 0,73, plnenie plánu 93 %.</p>
+<p><strong>Virtuálne palety</strong> (veľká biela technika uložená voľne, prepočítaná na palety) korelujú s objemom len 0,22, preto do predikcie nevstupujú — majú úplne iný pomer JBL na paletu. Zostávajú v dátach na neskoršie využitie.</p>
+
+<h2 id="13-zname-obmedzenia">13. Známe obmedzenia</h2>
+<ol>
+<li><strong>Lead time neodpovedá deklarovanej logike.</strong> Medián od objednávky po odchod je 28–36 h; z večerných objednávok odíde tú istú noc len 6 %. Treba overiť podiel objemu idúceho cez ďalší sklad.</li>
+<li><strong>Časy LT a ČS nie sú v exportoch</strong> — systém limity pozná (kvalita BJ/EXP sa voči nim vyhodnocuje), ale appka má len výsledok, nie konkrétne časy pri jednotlivých zvozoch. Preto upozornenia rozlišujú úrovne podľa voľnej kapacity. Po doplnení LT do OLAP-u bude rozlíšenie presné.</li>
+<li><strong>Príjem sa predikuje zle</strong> (24 % MAPE sezónnym modelom, 21,4 % z avíz). Ďalšie zlepšenie by prinieslo avízo v kusoch namiesto paliet.</li>
+<li><strong>Rozpad kvality podľa zmien nie je vážený.</strong></li>
+
+<li><strong>Letný a zimný čas</strong> je vyriešený automaticky — cron je naplánovaný na 04:00 aj 05:00 UTC a report sa odošle len vtedy, keď je v Prahe 6:00.</li>
+</ol>
+</div></body></html>
