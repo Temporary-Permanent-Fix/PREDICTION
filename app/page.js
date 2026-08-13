@@ -4,7 +4,7 @@ import { parseCSV, toCSV } from "../lib/csv";
 import {
   TYPY_VYNIMIEK, TYPY_UDALOSTI, buildDaily, mergedHourly, fitModel, predictDay,
   expectedFor, hourlyProfile, eventMult, intraday, cumProfile, predictZvoz,
-  addDays, dow, DNI, fmtD, iso, opShift, OP_HOURS, OP_START, dropIncompleteLastOpDay, opIdx, opIdxEnd, backtest, parseVynimky, adjustPartialDays, backlogForDay, predictPrijemZAviza,
+  addDays, dow, DNI, fmtD, iso, opShift, OP_HOURS, OP_START, dropIncompleteLastOpDay, opIdx, opIdxEnd, backtest, parseVynimky, adjustPartialDays, backlogForDay, predictPrijemZAviza, dfsDenne, dfsRozpad,
 } from "../lib/model";
 import { t, setLang, JAZYKY } from "../lib/preklady";
 
@@ -161,6 +161,8 @@ export default function Page() {
   const [upoz, setUpoz] = useState([]);
   const [manhours, setManhours] = useState([]);
   const [avizo, setAvizo] = useState([]);
+  const [dfsIn, setDfsIn] = useState([]);
+  const [dfsOut, setDfsOut] = useState([]);
   const [pobocky, setPobocky] = useState([]);
   const [pobocka, setPobocka] = useState(null);
   const [manazeri, setManazeri] = useState([]);
@@ -256,6 +258,8 @@ export default function Page() {
       loadMut("upozornenia.csv", setUpoz);
       loadMut("manhours.csv", setManhours);
       loadMut("avizo.csv", setAvizo);
+      loadMut("dfs_in.csv", setDfsIn);
+      loadMut("dfs_out.csv", setDfsOut);
       loadMut("manazeri.csv", setManazeri);
       fetch("/api/heslo").then((r) => r.json()).then((j) => setChranene(Boolean(j.chranene))).catch(() => {});
       try { const h = sessionStorage.getItem("vykony-heslo"); if (h) setHeslo(h); } catch {}
@@ -410,7 +414,7 @@ export default function Page() {
 
   setLang(jazyk);
   const trendPct = model.slope >= 0 ? "up" : "down";
-  const STANDALONE = ["prehlad", "upoz", "zataz", "kvalita", "zmeny", "udal", "model", "import", "admin"];
+  const STANDALONE = ["prehlad", "upoz", "zataz", "kvalita", "zmeny", "udal", "model", "import", "admin", "dfs"];
   const naZdroji = !STANDALONE.includes(tab);
 
   const prepniZdroj = (key) => {
@@ -450,6 +454,7 @@ export default function Page() {
         <div className="srcswitch" role="tablist" aria-label="Sekcia">
           {[["vzniky", "Vzniky"], ["triedenie", "Triedenie"], ["prijem", "Príjem"]].map(([k, l]) =>
             <button key={k} className={naZdroji && src === k ? "on" : ""} onClick={() => prepniZdroj(k)}><Ico n={k} />{t(l)}</button>)}
+          <button className={tab === "dfs" ? "on" : ""} onClick={() => setTab("dfs")}><Ico n="distribucia" />{t("Distribúcia")}</button>
           <span style={{ alignSelf: "center", color: "var(--border)", padding: "0 2px", userSelect: "none" }}>│</span>
           {[["prehlad", "Prehľad"], ["upoz", "Upozornenia"], ["zataz", "Perfo"], ["kvalita", "Kvalita"], ["zmeny", "Zmeny"], ["udal", "Udalosti"], ["model", "Model"], ["import", "Dáta"], ["admin", "Admin"]].map(([k, l]) =>
             <button key={k} className={`${tab === k ? "on" : ""}${k === "admin" ? " admin" : ""}`} onClick={() => setTab(k)}><Ico n={k} />{t(l)}</button>)}
@@ -474,7 +479,7 @@ export default function Page() {
         </div>
       )}
 
-      {tab === "pred" && <TabPredikcia avizo={avizo} TP={TP} D={D} uda={uda} src={src} kpi={kpi} pomery={staticData.pomery} backlogy={backlogy} />}
+      {tab === "pred" && <TabPredikcia avizo={avizo} dfsIn={dfsIn} TP={TP} D={D} uda={uda} src={src} kpi={kpi} pomery={staticData.pomery} backlogy={backlogy} />}
       {tab === "vstup" && <TabVstup D={D} uda={uda} src={src} zaznamy={zaznamy} setZaznamy={setZaznamy} vynimky={vynimky} setVynimky={setVynimky} save={save} />}
       {tab === "anom" && <TabAnomalie D={D} uda={uda} src={src} vynimky={vynimky} setVynimky={setVynimky} save={save} />}
       {tab === "udal" && <TabUdalosti D={V} uda={uda} setUdalosti={setUdalosti} save={save} />}
@@ -484,6 +489,7 @@ export default function Page() {
           {t("Pre túto pobočku zatiaľ nie sú dáta – nahraj exporty v záložke Dáta.")}
         </p>
       )}
+      {tab === "dfs" && <TabDfs dfsIn={dfsIn} dfsOut={dfsOut} uda={uda} vynimky={vynimky} udalosti={udalosti} pobocka={pobocka} />}
       {tab === "prehlad" && <TabPrehlad pobocka={pobocka} V={V} TP={TP} staticData={staticData} uda={uda} vynimky={vynimky} backlogy={backlogy} emaily={emaily} show={show} kpi={kpi} prahy={prahy} upozAktivne={upozAktivne} />}
       {tab === "zataz" && <TabZataz manhours={manhours} V={V} TP={TP} staticData={staticData} uda={uda} kpi={kpi} backlogy={backlogy} prahy={prahy} />}
       {tab === "kvalita" && <TabKvalita staticData={staticData} prahy={prahy} />}
@@ -498,7 +504,7 @@ export default function Page() {
 }
 
 // ------------------------------------------------------------- 🔮 Predikcia
-function TabPredikcia({ D, uda, src, kpi, pomery, backlogy, avizo, TP }) {
+function TabPredikcia({ D, uda, src, kpi, pomery, backlogy, avizo, TP, dfsIn }) {
   const [datum, setDatum] = useState(today());
   const [horizon, setHorizon] = useState(14);
   const { model, prof, daily } = D;
@@ -511,6 +517,16 @@ function TabPredikcia({ D, uda, src, kpi, pomery, backlogy, avizo, TP }) {
   const hist = daily.slice(-60);
   // príjem: ak existujú avíza, ponúkni aj odhad z plánu paliet
   const zAviza = src === "prijem" ? predictPrijemZAviza(datum, avizo, daily) : null;
+  // distribúcia k nám navyšuje objem príjmu (samostatný zdroj)
+  const dfsPrijem = useMemo(() => {
+    if (src !== "prijem" || !dfsIn?.length) return null;
+    const d = dfsDenne(dfsIn);
+    const skut = d.find((r) => r.datum === datum);
+    if (skut) return { hodnota: skut.jbl, typ: "skutočnosť" };
+    if (d.length < 20) return null;
+    const m = fitModel(d, [], uda);
+    return { hodnota: predictDay(datum, m, uda), typ: "predikcia" };
+  }, [src, dfsIn, datum, uda]);
 
   // ---- hodiny na spracovanie (výkony z KPI) ----
   const vykonPre = (pr) => {
@@ -564,12 +580,15 @@ function TabPredikcia({ D, uda, src, kpi, pomery, backlogy, avizo, TP }) {
         <div className="fld"><label>{t("Dátum predikcie")}</label><input type="date" value={datum} onChange={(e) => setDatum(e.target.value)} /></div>
         <div className="fld"><label>{t("Horizont")}: {horizon} {t("dní")}</label><input type="range" min="7" max="28" value={horizon} onChange={(e) => setHorizon(+e.target.value)} /></div>
       </div>
-      {zAviza && (
+      {(zAviza || dfsPrijem) && (
         <div className="card" style={{ marginBottom: 10, borderLeft: "3px solid var(--blue)" }}>
-          <div className="lbl">{t("Odhad z avíz dodávok")}</div>
-          <div className="val blue">{nf.format(zAviza.predikcia)}</div>
+          <div className="lbl">{t("Celkový objem príjmu")}</div>
+          <div className="val blue">{nf.format((zAviza ? zAviza.predikcia : pred) + (dfsPrijem ? dfsPrijem.hodnota : 0))}</div>
           <div className="sub">
-            {t("plán")} {nf.format(zAviza.plan)} {t("paliet")} × {nf1.format(zAviza.koef)} {t("JBL na paletu")} · {t("model bez avíz")}: {nf.format(pred)}
+            {zAviza
+              ? `${t("z avíz")} ${nf.format(zAviza.predikcia)} (${nf.format(zAviza.plan)} ${t("paliet")} × ${nf1.format(zAviza.koef)})`
+              : `${t("z modelu")} ${nf.format(pred)}`}
+            {dfsPrijem ? ` + ${t("distribúcia k nám")} ${nf.format(dfsPrijem.hodnota)} (${dfsPrijem.typ})` : ""}
           </div>
         </div>
       )}
@@ -890,7 +909,6 @@ function TabUdalosti({ D, uda, setUdalosti, save }) {
 
 // ------------------------------------------------------------ Prehľad (denný report)
 function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, kpi, prahy, upozAktivne = [], pobocka }) {
-  const [posielam, setPosielam] = useState(false);
   const [vybrane, setVybrane] = useState([]);
   const box = useRef(null);
 
@@ -1014,21 +1032,6 @@ function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, k
     const komu = (vybrane.length ? vybrane : emaily.map((e) => e.email)).join(";");
     window.location.href = `mailto:${komu}?subject=${encodeURIComponent(`${t("Prehľad")} ${pobocka} · ${fmtD(den)}${den.slice(0, 4)}`)}&body=${encodeURIComponent(zhrnutie() + "\n\n" + t("Obrázok prehľadu vlož zo schránky (Ctrl+V)."))}`;
   };
-  const posli = async () => {
-    if (!vybrane.length) return;
-    setPosielam(true);
-    try {
-      const url = await png();
-      const r = await fetch("/api/mail", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prijemcovia: vybrane, predmet: `${t("Prehľad")} ${pobocka} · ${fmtD(den)}${den.slice(0, 4)}`,
-          text: zhrnutie(), priloha: url.split(",")[1], nazovPrilohy: `prehlad-${String(pobocka).toLowerCase()}-${den}.png` }),
-      });
-      const j = await r.json();
-      if (r.ok) show(`${t("Odoslané príjemcom")}: ${j.odoslane}`); else show(j.error || t("Odoslanie zlyhalo."), true);
-    } catch { show(t("Odoslanie zlyhalo."), true); }
-    setPosielam(false);
-  };
 
   return (
     <>
@@ -1146,12 +1149,7 @@ function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, k
                 );
               })}
             </div>
-            <div className="frm">
-              <button className="btn" disabled={!vybrane.length || posielam} onClick={posli}>
-                <Ico n="mail" />{posielam ? t("Odosielam…") : (vybrane.length ? `${t("Poslať e-mailom")} (${vybrane.length})` : t("Poslať e-mailom"))}
-              </button>
-              {!vybrane.length && <span className="note" style={{ alignSelf: "center", margin: 0 }}>{t("Označ aspoň jedného príjemcu kliknutím na meno.")}</span>}
-            </div>
+            <p className="note">{t("Označení príjemcovia sa predvyplnia do e-mailu, ktorý otvorí tlačidlo Otvoriť v Outlooku. Bez označenia sa predvyplnia všetci.")}</p>
           </>
         ) : <p className="note">{t("Žiadni príjemcovia – pridaj ich v záložke Admin.")}</p>}
       </div>
@@ -1667,6 +1665,117 @@ function TabVykony({ kpi, setKpi, save, emaily, setEmaily, prahyR, setPrahy, pra
   );
 }
 
+// ------------------------------------------------------------ Distribúcia (DFS)
+// Toky medzi pobočkami. IN = k nám (navyšuje objem príjmu), OUT = od nás
+// (súčasť expedičnej práce – len rozpad, nič nenavyšuje).
+function TabDfs({ dfsIn, dfsOut, uda, vynimky, udalosti, pobocka }) {
+  const [smer, setSmer] = useState("in");
+  const [obdobie, setObdobie] = useState(30);
+  const [kluc, setKluc] = useState("protistrana");
+  const rows = smer === "in" ? dfsIn : dfsOut;
+
+  const daily = useMemo(() => dfsDenne(rows), [rows]);
+  const model = useMemo(() => {
+    if (daily.length < 20) return null;
+    return fitModel(daily, vynimky.map((v) => v.datum), udalosti);
+  }, [daily, vynimky, udalosti]);
+
+  if (!rows.length) {
+    return (
+      <>
+        <Prepinac smer={smer} setSmer={setSmer} />
+        <p className="note">{t("Chýbajú dáta – nahraj export DFS FROM LC a DFS TO LC v záložke Dáta.")}</p>
+      </>
+    );
+  }
+
+  const doD = daily[daily.length - 1].datum;
+  const od = addDays(doD, -(obdobie - 1));
+  const vObd = daily.filter((r) => r.datum >= od);
+  const spolu = vObd.reduce((a, r) => a + r.jbl, 0);
+  const priemer = vObd.length ? spolu / vObd.length : 0;
+  const rozpad = dfsRozpad(rows, od, doD, kluc);
+  const zajtra = model ? predictDay(addDays(doD, 1), model, uda) : null;
+  const posledny = daily[daily.length - 1].jbl;
+
+  return (
+    <>
+      <Prepinac smer={smer} setSmer={setSmer} />
+      <p className="note">
+        {smer === "in"
+          ? t("Distribúcia k nám – tovar prichádzajúci z iných pobočiek. Objem sa pripočítava k predikcii príjmu ako druhý zdroj. Tu ide o rozpad, predikciu expedície nenavyšuje.")
+          : t("Distribúcia od nás – tovar odosielaný na iné pobočky. Je už súčasťou expedičnej práce, takže nič nenavyšuje – ide len o rozpad, kam objem smeruje.")}
+      </p>
+
+      <div className="frm" style={{ marginBottom: 12 }}>
+        <div className="seg">
+          {[[7, "7"], [30, "30"], [90, "90"]].map(([nn, l]) =>
+            <button key={nn} className={obdobie === nn ? "on" : ""} onClick={() => setObdobie(nn)}>{l} {t("dní")}</button>)}
+        </div>
+        <span className="note" style={{ alignSelf: "center", margin: 0 }}>
+          {fmtD(od)}{od.slice(0, 4)} – {fmtD(doD)}{doD.slice(0, 4)} · {pobocka}
+        </span>
+      </div>
+
+      <div className="grid g4">
+        <Card lbl={t("Objem za obdobie")} val={nf.format(spolu)} cls="accent" sub={`${nf.format(priemer)} ${t("JBL/deň priemer")}`} />
+        <Card lbl={t("Posledný deň")} val={nf.format(posledny)} sub={`${fmtD(doD)}${doD.slice(0, 4)}`} />
+        <Card lbl={t("Predikcia na zajtra")} val={zajtra != null ? nf.format(zajtra) : "–"}
+          cls="blue" sub={model ? `${t("model z")} ${daily.length} ${t("dní")}` : t("málo dát na model")} />
+        <Card lbl={smer === "in" ? t("Vplyv na príjem") : t("Vplyv na expedíciu")}
+          val={smer === "in" ? "+" + nf.format(priemer) : "0"}
+          sub={smer === "in" ? t("pripočíta sa k predikcii príjmu") : t("už je v objeme expedície")} />
+      </div>
+
+      <div className="section">
+        <h3>{t("Vývoj v čase")}</h3>
+        <div className="chartbox">
+          <Bars color={smer === "in" ? "var(--blue)" : "var(--green)"} height={200}
+            data={vObd.map((r) => ({ x: `${fmtD(r.datum)}`, y: r.jbl }))} />
+        </div>
+      </div>
+
+      <div className="section">
+        <div className="frm" style={{ marginBottom: 8 }}>
+          <h3 style={{ margin: 0 }}>{t("Rozpad objemu")}</h3>
+          <div className="seg">
+            <button className={kluc === "protistrana" ? "on" : ""} onClick={() => setKluc("protistrana")}>
+              {smer === "in" ? t("Odkiaľ") : t("Kam")}
+            </button>
+            <button className={kluc === "geosize" ? "on" : ""} onClick={() => setKluc("geosize")}>{t("Veľkosť (geosize)")}</button>
+          </div>
+        </div>
+        <table className="t">
+          <thead><tr>
+            <th>{kluc === "geosize" ? t("Veľkosť") : (smer === "in" ? t("Zdrojová pobočka") : t("Cieľová pobočka"))}</th>
+            <th style={{ textAlign: "right" }}>{t("Objem")}</th>
+            <th style={{ textAlign: "right" }}>{t("Podiel")}</th>
+            <th style={{ textAlign: "right" }}>{t("Priemer na deň")}</th>
+          </tr></thead>
+          <tbody>{rozpad.slice(0, 20).map((r) => (
+            <tr key={r.nazov}>
+              <td style={{ fontFamily: "var(--sans)" }}>{r.nazov}</td>
+              <td style={{ textAlign: "right" }}>{nf.format(r.jbl)}</td>
+              <td style={{ textAlign: "right" }} className={r.podiel >= 20 ? "accent" : ""}>{nf1.format(r.podiel)} %</td>
+              <td style={{ textAlign: "right" }}>{nf.format(r.jbl / (vObd.length || 1))}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+        {rozpad.length > 20 && <p className="note">{t("Zobrazených 20 najväčších z")} {rozpad.length}.</p>}
+      </div>
+    </>
+  );
+}
+
+function Prepinac({ smer, setSmer }) {
+  return (
+    <div className="seg" style={{ marginBottom: 12 }}>
+      <button className={smer === "in" ? "on" : ""} onClick={() => setSmer("in")}>{t("In – k nám")}</button>
+      <button className={smer === "out" ? "on" : ""} onClick={() => setSmer("out")}>{t("Out – od nás")}</button>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------ Upozornenia
 // Deficit hodinového výtlaku triedenia. Žlté = riziko kvality (dobehne sa),
 // červené = objem sa nestihne a presúva sa na ďalší deň (návrh na potvrdenie).
@@ -1979,11 +2088,18 @@ function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
 
   return (
     <>
-      <p className="note">
-        Nahraj nový Excel export a appka si z neho sama pripraví dátové súbory. Rozpozná
-        <b> OLAP_PREDICTION</b> {t("(vzniky, distribúcia, zvozy)")}, <b>VOLUMES</b> {t("(príjem, triedenie, pomery procesov)")}
-        a <b>QUALITY</b> {t("(kvalita). Naraz môžeš vybrať aj všetky tri.")}
-      </p>
+      <p className="note">{t("Nahraj Excel exporty a appka si z nich sama pripraví dátové súbory. Typ rozpozná podľa obsahu, nie podľa názvu – môžeš ich vybrať aj všetky naraz. Zošit s viacerými hárkami spracuje celý.")}</p>
+      <table className="t" style={{ maxWidth: 620, marginBottom: 14 }}>
+        <thead><tr><th>{t("Export")}</th><th>{t("Čo z neho vznikne")}</th></tr></thead>
+        <tbody>
+          <tr><td style={{ fontFamily: "var(--sans)" }}>OLAP_PREDICTION</td><td style={{ fontFamily: "var(--sans)" }}>{t("vzniky, distribúcia, matica zvozov")}</td></tr>
+          <tr><td style={{ fontFamily: "var(--sans)" }}>VOLUMES</td><td style={{ fontFamily: "var(--sans)" }}>{t("príjem, triedenie, pomery procesov")}</td></tr>
+          <tr><td style={{ fontFamily: "var(--sans)" }}>QUALITY</td><td style={{ fontFamily: "var(--sans)" }}>{t("kvalita denne a po hodinách")}</td></tr>
+          <tr><td style={{ fontFamily: "var(--sans)" }}>SJL ManHours</td><td style={{ fontFamily: "var(--sans)" }}>{t("odpracované hodiny po procesoch")}</td></tr>
+          <tr><td style={{ fontFamily: "var(--sans)" }}>{t("Vyložené palety a plán")}</td><td style={{ fontFamily: "var(--sans)" }}>{t("avíza dodávok – rozdelia sa podľa pobočiek")}</td></tr>
+          <tr><td style={{ fontFamily: "var(--sans)" }}>{t("Kalendár zmien")}</td><td style={{ fontFamily: "var(--sans)" }}>{t("rozpis operation managerov")}</td></tr>
+        </tbody>
+      </table>
 
       <div style={{ border: "1px dashed var(--border2)", borderRadius: "var(--r)", padding: "22px 18px", textAlign: "center", background: "var(--card)" }}
         onDragOver={(e) => e.preventDefault()}
