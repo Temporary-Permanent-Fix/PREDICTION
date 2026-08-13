@@ -102,7 +102,7 @@ const ICO = {
   kvalita: "M20 6 9.5 16.5 4 11",
   udal: "M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z",
   kpi: "M4 20V10m5 10V4m5 16v-7m5 7V8",
-  vykony: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8.4-3a8.4 8.4 0 0 0-.15-1.5l2-1.6-2-3.4-2.4 1a8.4 8.4 0 0 0-2.6-1.5L15 2H9l-.35 2.5a8.4 8.4 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.6a8.4 8.4 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a8.4 8.4 0 0 0 2.6 1.5L9 22h6l.35-2.5a8.4 8.4 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6c.1-.5.15-1 .15-1.5Z",
+  admin: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8.4-3a8.4 8.4 0 0 0-.15-1.5l2-1.6-2-3.4-2.4 1a8.4 8.4 0 0 0-2.6-1.5L15 2H9l-.35 2.5a8.4 8.4 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.6a8.4 8.4 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a8.4 8.4 0 0 0 2.6 1.5L9 22h6l.35-2.5a8.4 8.4 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6c.1-.5.15-1 .15-1.5Z",
   model: "M12 4a3 3 0 0 0-3 3M12 4a3 3 0 0 1 3 3M9 7a3 3 0 0 0-3 3m12-3a3 3 0 0 1 3 3M6 10a3 3 0 0 0 1 5.6M18 10a3 3 0 0 1-1 5.6M7 15.6A3 3 0 0 0 12 20a3 3 0 0 0 5-4.4M12 8v12",
   pred: "M4 18 9 11l4 3.2L20 6M20 6h-4.5M20 6v4.5",
   zvoz: "M3 7h10v9H3zM13 10h4l3 3v3h-7zM7.5 19a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Zm9 0a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z",
@@ -279,6 +279,15 @@ export default function Page() {
     } catch { show(t("Uložené len lokálne (bez pripojenia)."), true); }
   };
 
+  const saveRawDo = async (pob, file, content, message) => {
+    const r = await fetch("/api/gh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(heslo ? { "x-vykony-heslo": heslo } : {}) },
+      body: JSON.stringify({ file: `${pob}/${file}`, content, message: `[${pob}] ${message}` }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || `Zápis ${pob}/${file} zlyhal.`);
+  };
+
   const saveRaw = async (file, content, message) => {
     const r = await fetch("/api/gh", {
       method: "POST",
@@ -377,6 +386,13 @@ export default function Page() {
     return out.sort((a, b) => (a.datum < b.datum ? 1 : -1));
   }, [TP, prahyR, upoz, udalosti]);
 
+  // pri pobočke bez dát nemá zmysel držať zdrojovú záložku – prepni na Dáta
+  useEffect(() => {
+    if (!staticData) return;
+    const prazdna = !staticData.vzniky?.length && !staticData.triedenie?.length;
+    if (prazdna && !["import", "admin"].includes(tab)) setTab("import");
+  }, [staticData]);
+
   if (loadErr) return (
     <div className="shell"><div className="masthead">
       <h1>{t("PREDIKCIA")} {pobocka}</h1>
@@ -384,21 +400,9 @@ export default function Page() {
       <div className="note">{t("Skontroluj, či je súbor v repe a či prebehol Redeploy.")}</div>
     </div></div>
   );
-  if (staticData && (!staticData.vzniky?.length && !staticData.triedenie?.length))
-    return (
-      <div className="shell"><div className="masthead">
-        <div className="eyebrow"><span className="livedot" /> {pobocka} · {t("LOGISTIKA")}</div>
-        <h1>{t("PREDIKCIA")} {pobocka}</h1>
-        <p className="note" style={{ marginTop: 10 }}>{t("Pre túto pobočku zatiaľ nie sú nahraté dáta. Nahraj exporty v záložke Dáta.")}</p>
-        {pobocky.length > 1 && (
-          <div className="pobsw">{pobocky.map((p) => (
-            <button key={p.kod} className={pobocka === p.kod ? "on" : ""}
-              onClick={() => { setPobocka(p.kod); try { localStorage.setItem("pobocka", p.kod); } catch {} }}>{p.nazov || p.kod}</button>
-          ))}</div>
-        )}
-      </div></div>
-    );
   if (!D || !V || !TP) return <div className="shell"><div className="note">{t("Načítavam dáta…")}</div></div>;
+  // pobočka bez dát: záložky zostávajú prístupné (najmä Dáta na import)
+  const prazdnaPobocka = !staticData.vzniky?.length && !staticData.triedenie?.length;
   const { model, prof } = D;
   const uda = udalosti;
 
@@ -406,8 +410,9 @@ export default function Page() {
 
   setLang(jazyk);
   const trendPct = model.slope >= 0 ? "up" : "down";
-  const STANDALONE = ["prehlad", "upoz", "zataz", "kvalita", "zmeny", "udal", "vykony", "model", "import"];
+  const STANDALONE = ["prehlad", "upoz", "zataz", "kvalita", "zmeny", "udal", "model", "import", "admin"];
   const naZdroji = !STANDALONE.includes(tab);
+
   const prepniZdroj = (key) => {
     setSrc(key);
     if (!naZdroji || (key !== "vzniky" && tab === "zvoz")) setTab("pred");
@@ -446,8 +451,8 @@ export default function Page() {
           {[["vzniky", "Vzniky"], ["triedenie", "Triedenie"], ["prijem", "Príjem"]].map(([k, l]) =>
             <button key={k} className={naZdroji && src === k ? "on" : ""} onClick={() => prepniZdroj(k)}><Ico n={k} />{t(l)}</button>)}
           <span style={{ alignSelf: "center", color: "var(--border)", padding: "0 2px", userSelect: "none" }}>│</span>
-          {[["prehlad", "Prehľad"], ["upoz", "Upozornenia"], ["zataz", "Perfo"], ["kvalita", "Kvalita"], ["zmeny", "Zmeny"], ["udal", "Udalosti"], ["vykony", "Výkony"], ["model", "Model"], ["import", "Dáta"]].map(([k, l]) =>
-            <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}><Ico n={k} />{t(l)}</button>)}
+          {[["prehlad", "Prehľad"], ["upoz", "Upozornenia"], ["zataz", "Perfo"], ["kvalita", "Kvalita"], ["zmeny", "Zmeny"], ["udal", "Udalosti"], ["model", "Model"], ["import", "Dáta"], ["admin", "Admin"]].map(([k, l]) =>
+            <button key={k} className={`${tab === k ? "on" : ""}${k === "admin" ? " admin" : ""}`} onClick={() => setTab(k)}><Ico n={k} />{t(l)}</button>)}
         </div>
         <div className="langsw" role="group" aria-label="Jazyk / Language">
           <Ico n="jazyk" />
@@ -474,12 +479,17 @@ export default function Page() {
       {tab === "anom" && <TabAnomalie D={D} uda={uda} src={src} vynimky={vynimky} setVynimky={setVynimky} save={save} />}
       {tab === "udal" && <TabUdalosti D={V} uda={uda} setUdalosti={setUdalosti} save={save} />}
       {tab === "upoz" && <TabUpoz upozornenia={upozornenia} upoz={upoz} setUpoz={setUpoz} backlogy={backlogy} setBacklogy={setBacklogy} save={save} kpi={kpi} pomery={staticData.pomery} />}
+      {prazdnaPobocka && (
+        <p className="note" style={{ color: "var(--amber)", marginTop: 4 }}>
+          {t("Pre túto pobočku zatiaľ nie sú dáta – nahraj exporty v záložke Dáta.")}
+        </p>
+      )}
       {tab === "prehlad" && <TabPrehlad pobocka={pobocka} V={V} TP={TP} staticData={staticData} uda={uda} vynimky={vynimky} backlogy={backlogy} emaily={emaily} show={show} kpi={kpi} prahy={prahy} upozAktivne={upozAktivne} />}
       {tab === "zataz" && <TabZataz manhours={manhours} V={V} TP={TP} staticData={staticData} uda={uda} kpi={kpi} backlogy={backlogy} prahy={prahy} />}
       {tab === "kvalita" && <TabKvalita staticData={staticData} prahy={prahy} />}
       {tab === "zmeny" && <TabZmeny staticData={staticData} zmeny={zmeny} setZmeny={setZmeny} manazeri={manazeri} save={save} prahy={prahy} />}
-      {tab === "vykony" && <TabVykony kpi={kpi} setKpi={setKpi} save={save} emaily={emaily} setEmaily={setEmaily} prahyR={prahyR} setPrahy={setPrahy} prahy={prahy} chranene={chranene} heslo={heslo} setHeslo={setHeslo} show={show} />}
-      {tab === "import" && <TabImport saveRaw={saveRaw} show={show} ghOk={ghOk} />}
+      {tab === "admin" && <TabVykony kpi={kpi} setKpi={setKpi} save={save} emaily={emaily} setEmaily={setEmaily} prahyR={prahyR} setPrahy={setPrahy} prahy={prahy} chranene={chranene} heslo={heslo} setHeslo={setHeslo} show={show} />}
+      {tab === "import" && <TabImport saveRaw={saveRaw} saveRawDo={saveRawDo} show={show} ghOk={ghOk} />}
       {tab === "model" && <TabModel sources={{ vzniky: { ...V, vynD: vynimky.map((v) => v.datum) }, triedenie: TP.triedenie, prijem: TP.prijem, distribucia: TP.distribucia }} vynD={vynimky.map((v) => v.datum)} uda={uda} />}
 
       {toast && <div className={`toast ${toast.err ? "err" : ""}`}>{toast.msg}</div>}
@@ -727,13 +737,11 @@ function TabVstup({ src, zaznamy, setZaznamy, vynimky, setVynimky, save, D, uda 
 
 // -------------------------------------------------------- ⚠️ Anomálie
 function TabAnomalie({ D, uda, src, vynimky, setVynimky, save }) {
-  const BCOLS = ["z_datum", "na_datum", "objem", "zdroj", "poznamka"];
   const [thr, setThr] = useState(25);
   const [datum, setDatum] = useState(addDays(today(), -1));
   const [typ, setTyp] = useState(TYPY_VYNIMIEK[0]);
   const [popis, setPopis] = useState("");
   const [selHod, setSelHod] = useState([]);
-  const [blDatum, setBlDatum] = useState("");
   const { daily, model, prof, hourly, part } = D;
   const VCOLS = ["datum", "typ", "popis", "hodiny"];
   const vmap = new Map(vynimky.map((v) => [v.datum, v]));
@@ -751,67 +759,6 @@ function TabAnomalie({ D, uda, src, vynimky, setVynimky, save }) {
   };
   const zmaz = (d) => save("vynimky.csv", vynimky.filter((v) => v.datum !== d), VCOLS, `data: odstránená výnimka ${d}`, setVynimky);
   const togHod = (h) => setSelHod(selHod.includes(h) ? selHod.filter((x) => x !== h) : [...selHod, h]);
-
-  // ---- backlog: čiastočné výnimky s hodinami
-  const partSorted = [...part].sort((a, b) => (a.datum < b.datum ? 1 : -1));
-  const blSel = partSorted.find((p) => p.datum === blDatum) || partSorted[0];
-  let bl = null;
-  if (blSel) {
-    const adjRow = (D.dailyAdj || daily).find((r) => r.datum === blSel.datum);
-    const clean = adjRow ? adjRow.jbl : expectedFor(blSel.datum, model, uda);
-    bl = { ...backlogForDay(blSel.datum, blSel.hodiny, hourly, clean, prof), clean, vyn: blSel };
-  }
-  const vykonPre = (p, d) => {
-    const o = (kpi || []).find((k) => k.proces === p && k.datum === d);
-    if (o && +o.vykon > 0) return +o.vykon;
-    const g = (kpi || []).find((k) => k.proces === p && !k.datum);
-    return g && +g.vykon > 0 ? +g.vykon : 0;
-  };
-  const blProcesy = src === "prijem" ? [["Príjem", 1]]
-    : [["Pick", (pomery?.Pick ?? 1)], ["Pack", (pomery?.Pack ?? 1)], ["Sort", 1]];
-  const blScale = 1; // celý backlog je práca, ktorá sa musí spraviť (zákaznícka aj distribučná)
-  const blHodiny = bl ? blProcesy.map(([p, r]) => {
-    const v = vykonPre(p, bl.vyn.datum);
-    return { p, objem: bl.backlog * r * blScale, vykon: v, hod: v > 0 ? (bl.backlog * r * blScale) / v : null };
-  }) : [];
-  const blSpolu = blHodiny.reduce((a, x) => a + (x.hod || 0), 0);
-
-  // presun backlogu na najbližšie zvozové sloty: zmeškaný slot -> rovnaká hodina +1 deň
-  // (63,6 % objemu reálne odchádza v rovnakej hodine slotu, len v iný deň)
-  const blCiele = (() => {
-    if (!bl || !slotMap) return [];
-    const maxAffIdx = Math.max(...bl.vyn.hodiny.map((h) => (h - OP_START + 24) % 24));
-    const acc = new Map(); // `${datum}|${zh}` -> objem
-    for (const d of bl.detail) {
-      if (d.backlog <= 0) continue;
-      const sm = slotMap[String(d.hodina)] || [];
-      const tot = sm.reduce((a, s) => a + s.podiel, 0) || 1;
-      for (const s of sm) {
-        let off = s.off;
-        const slotIdx = (s.zh - OP_START + 24) % 24;
-        if (off === 0 && slotIdx <= maxAffIdx) off = 1; // slot padol do/pred anomáliu -> ďalší deň
-        const cielDatum = addDays(bl.vyn.datum, off);
-        const k = `${cielDatum}|${s.zh}`;
-        acc.set(k, (acc.get(k) || 0) + d.backlog * (s.podiel / tot));
-      }
-    }
-    return [...acc.entries()].map(([k, o]) => {
-      const [datum, zh] = k.split("|");
-      return { datum, zh: +zh, objem: o };
-    }).filter((x) => x.objem >= 20).sort((a, b) => (a.datum + String(a.zh).padStart(2, "0") < b.datum + String(b.zh).padStart(2, "0") ? -1 : 1));
-  })();
-
-  const uzPrenesene = bl && backlogy.some((b) => b.z_datum === bl.vyn.datum && (b.zdroj || "triedenie") === src);
-  const prenesBacklog = () => {
-    if (!bl) return;
-    const perDay = new Map();
-    for (const c of blCiele) perDay.set(c.datum, (perDay.get(c.datum) || 0) + c.objem);
-    const rest = backlogy.filter((b) => !(b.z_datum === bl.vyn.datum && (b.zdroj || "triedenie") === src));
-    const rows = [...rest, ...[...perDay.entries()].map(([na_datum, o]) => ({
-      z_datum: bl.vyn.datum, na_datum, objem: Math.round(o), zdroj: src, poznamka: bl.vyn.typ,
-    }))];
-    save("backlog.csv", rows, BCOLS, `data: presun backlogu ${bl.vyn.datum}`, setBacklogy);
-  };
 
   return (
     <>
@@ -851,20 +798,6 @@ function TabAnomalie({ D, uda, src, vynimky, setVynimky, save }) {
         </div>
       </div>
 
-      {backlogy.length > 0 && (
-        <div className="section">
-          <h3>{t("Prenesené backlogy (")} {backlogy.length})</h3>
-          <table className="t"><thead><tr><th>{t("Z dňa")}</th><th>{t("Na deň")}</th><th>{t("Objem")}</th><th>{t("Zdroj")}</th><th>{t("Pôvod")}</th><th /></tr></thead>
-            <tbody>{[...backlogy].sort((a, b) => (a.na_datum < b.na_datum ? 1 : -1)).map((b, i) => (
-              <tr key={i}><td>{fmtD(b.z_datum)}</td><td className="warn">{fmtD(b.na_datum)}</td><td>{nf.format(+b.objem)}</td>
-                <td><span className="pill gray">{b.zdroj}</span></td><td style={{ fontFamily: "var(--sans)" }}>{t(b.poznamka)}</td>
-                <td><button className="btn ghost" onClick={() => {
-                  const rows = backlogy.filter((_, j) => j !== i);
-                  save("backlog.csv", rows, BCOLS, `data: zrušený backlog ${b.z_datum}`, setBacklogy);
-                }}><Ico n="trash" /></button></td></tr>
-            ))}</tbody></table>
-        </div>
-      )}
 
       {vynimky.length > 0 && (
         <div className="section">
@@ -1585,31 +1518,34 @@ function TabVykony({ kpi, setKpi, save, emaily, setEmaily, prahyR, setPrahy, pra
   };
   const inp = { width: 110, background: "var(--field)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 9px", fontFamily: "var(--mono)" };
 
+  // Admin je celý za heslom – obsah sa zobrazí až po odomknutí
+  if (chranene && !odomknute) {
+    return (
+      <div className="card" style={{ maxWidth: 460, margin: "24px auto", borderColor: "var(--amber)", borderLeft: "3px solid var(--amber)" }}>
+        <div className="lbl" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--amber)" }}>
+          <Ico n="lock" /> {t("Chránená sekcia")}
+        </div>
+        <p className="note">{t("Nastavenia appky – výkony, prahy, príjemcovia reportu. Zadaj heslo, platí do zatvorenia karty prehliadača.")}</p>
+        <div className="frm">
+          <div className="fld"><label>{t("Heslo")}</label>
+            <input type="password" value={pokus} autoComplete="off" autoFocus
+              onChange={(e) => setPokus(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && pokus) odomkni(); }} /></div>
+          <button className="btn" disabled={!pokus || overujem} onClick={odomkni}>
+            <Ico n="lock" />{overujem ? t("Overujem…") : t("Odomknúť")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {chranene && (
-        <div className="card" style={{ marginBottom: 14, borderColor: odomknute ? "var(--border)" : "var(--amber)" }}>
-          {odomknute ? (
-            <div className="frm" style={{ alignItems: "center" }}>
-              <span className="pill green"><Ico n="lock" /> {t("odomknuté")}</span>
-              <span className="note" style={{ margin: 0 }}>{t("Zmeny výkonov sú povolené v tejto relácii.")}</span>
-              <button className="btn ghost" onClick={zamkni}><Ico n="lock" />{t("Zamknúť")}</button>
-            </div>
-          ) : (
-            <>
-              <div className="lbl" style={{ display: "flex", alignItems: "center", gap: 6 }}><Ico n="lock" /> {t("Chránené nastavenie")}</div>
-              <p className="note">{t("Plošné výkony môžu meniť len poverení ľudia. Zadaj heslo – platí do zatvorenia karty prehliadača.")}</p>
-              <div className="frm">
-                <div className="fld"><label>{t("Heslo")}</label>
-                  <input type="password" value={pokus} autoComplete="off"
-                    onChange={(e) => setPokus(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && pokus) odomkni(); }} /></div>
-                <button className="btn" disabled={!pokus || overujem} onClick={odomkni}>
-                  <Ico n="lock" />{overujem ? t("Overujem…") : t("Odomknúť")}
-                </button>
-              </div>
-            </>
-          )}
+        <div className="frm" style={{ marginBottom: 14, alignItems: "center" }}>
+          <span className="pill green"><Ico n="lock" /> {t("odomknuté")}</span>
+          <span className="note" style={{ margin: 0 }}>{t("Zmeny sú povolené v tejto relácii.")}</span>
+          <button className="btn ghost" onClick={zamkni}><Ico n="lock" />{t("Zamknúť")}</button>
         </div>
       )}
       <p className="note">{t("Plošné výkony (JBL na osobu a hodinu) platia pre všetky dni – používa ich Predikcia (hodiny na spracovanie), KPI aj backlog. Úpravy pre konkrétne dni sa spravujú v záložke KPI a majú pred plošnými prednosť.")}</p>
@@ -1963,7 +1899,9 @@ function TabZmeny({ staticData, zmeny, setZmeny, manazeri, save, prahy }) {
   );
 }
 
-function TabImport({ saveRaw, show, ghOk }) {
+const POVOLENE_POBOCKY = ["SKLC3", "CZLC4", "LCU"];
+
+function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
   const [vysledky, setVysledky] = useState([]);
   const [zmazat, setZmazat] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1979,11 +1917,20 @@ function TabImport({ saveRaw, show, ghOk }) {
       for (const f of files) {
         try {
           const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const typ = detekuj(ws, XLSX);
-          if (!typ) throw new Error("Formát sa nepodarilo rozpoznať – čakám OLAP, VOLUMES alebo QUALITY export.");
-          const { subory, suhrn } = prevod(typ, ws, XLSX);
-          nove.push({ nazov: f.name, typ, popisTypu: POPIS_TYPU[typ], suhrn, subory });
+          // zošit môže obsahovať viac hárkov (napr. VOLUMES a QUALITY vedľa seba)
+          const subory = {}; const typy = []; const suhrny = [];
+          for (const meno of wb.SheetNames) {
+            const ws = wb.Sheets[meno];
+            let typ = null;
+            try { typ = detekuj(ws, XLSX); } catch {}
+            if (!typ) continue;
+            const v = prevod(typ, ws, XLSX, POVOLENE_POBOCKY);
+            Object.assign(subory, v.subory);
+            typy.push(typ); suhrny.push(wb.SheetNames.length > 1 ? `${meno}: ${v.suhrn}` : v.suhrn);
+          }
+          if (!typy.length) throw new Error("Formát sa nepodarilo rozpoznať – čakám OLAP, VOLUMES, QUALITY, kalendár zmien, ManHours alebo avíza.");
+          const typ = [...new Set(typy)].join(" + ");
+          nove.push({ nazov: f.name, typ, popisTypu: typy.map((x) => POPIS_TYPU[x]).filter(Boolean).join(" · "), suhrn: suhrny.join(" | "), subory });
         } catch (e) {
           nove.push({ nazov: f.name, chyba: String(e.message || e) });
         }
@@ -2010,7 +1957,13 @@ function TabImport({ saveRaw, show, ghOk }) {
       }
       for (const v of ok) {
         for (const [nazov, obsah] of Object.entries(v.subory)) {
-          await saveRaw(nazov, obsah, `data: import ${v.typ} (${v.nazov})`);
+          // kľúč "POBOCKA::subor.csv" zapíše do inej pobočky (avíza sú spoločný export)
+          if (nazov.includes("::")) {
+            const [pob, file] = nazov.split("::");
+            await saveRawDo(pob, file, obsah, `data: import ${v.typ} (${v.nazov})`);
+          } else {
+            await saveRaw(nazov, obsah, `data: import ${v.typ} (${v.nazov})`);
+          }
         }
       }
       show(`Uložených ${spolu} súborov – načítavam nové dáta…`);
