@@ -1,17 +1,15 @@
 // Denný report o 06:00 – spúšťa Vercel Cron (viď vercel.json).
-// Číta dáta z GitHubu, prepočíta predchádzajúci prevádzkový deň a rozpošle
-// e-mail všetkým adresám z emaily.csv cez Resend.
+// Číta dáta z GitHubu, prepočíta predchádzajúci prevádzkový deň a pošle kartu do Teams.
 //
-// Kanály (stačí ktorýkoľvek, dajú sa aj oba naraz):
-//   TEAMS_WEBHOOK  – URL webhooku kanála v MS Teams
-//   RESEND_API_KEY + MAIL_FROM – odosielanie e-mailom cez Resend
-// Ďalšie env: GH_TOKEN, GH_REPO, APP_URL (odkaz v správe),
+// Odosiela do MS Teams cez webhook kanála (env TEAMS_WEBHOOK).
+// Preposielanie na e-mail rieši Power Automate nad kanálom, appka maily neposiela.
+// Ďalšie env: GH_TOKEN, GH_REPO, APP_URL (odkaz v správe), REPORT_POBOCKA,
 //   CRON_SECRET (voliteľné – Vercel ho posiela v hlavičke Authorization)
 
 import { parseCSV } from "../../../../lib/csv";
 import {
   buildDaily, fitModel, expectedFor, predictDay, opShift, dropIncompleteLastOpDay,
-  addDays, dow, DNI, fmtD,
+  addDays, dow, DNI, fmtD, iso,
 } from "../../../../lib/model";
 
 export const dynamic = "force-dynamic";
@@ -47,27 +45,25 @@ export async function GET(req) {
   const hodinaPraha = +new Intl.DateTimeFormat("sk-SK", {
     timeZone: "Europe/Prague", hour: "numeric", hour12: false,
   }).format(new Date());
+  // report sa pokúša odoslať od 6:00 do 9:00 miestneho času, kým nie sú dáta
   const jeCron = Boolean(req.headers.get("authorization")) || req.headers.get("user-agent")?.includes("vercel-cron");
-  if (jeCron && hodinaPraha !== +(process.env.REPORT_HODINA || 6))
-    return Response.json({ preskocene: true, hodinaPraha });
+  const odHodiny = +(process.env.REPORT_HODINA || 6);
+  if (jeCron && (hodinaPraha < odHodiny || hodinaPraha > odHodiny + 3))
+    return Response.json({ preskocene: true, dovod: "mimo okna odosielania", hodinaPraha });
   const tajne = process.env.CRON_SECRET;
   if (tajne && req.headers.get("authorization") !== `Bearer ${tajne}`)
     return Response.json({ error: "Neautorizované." }, { status: 401 });
 
-  const key = process.env.RESEND_API_KEY, from = process.env.MAIL_FROM;
   const teamsUrl = process.env.TEAMS_WEBHOOK;
-  const mailOk = Boolean(key && from);
-  if (!mailOk && !teamsUrl)
-    return Response.json({ error: "Nie je nastavený žiadny kanál (TEAMS_WEBHOOK alebo RESEND_API_KEY + MAIL_FROM)." }, { status: 501 });
+  if (!teamsUrl)
+    return Response.json({ error: "Nie je nastavený TEAMS_WEBHOOK." }, { status: 501 });
 
-  const [vzT, trT, diT, kvT, vynT, udaT, bkT, emT] = await Promise.all([
+  const [vzT, trT, diT, kvT, vynT, udaT, bkT] = await Promise.all([
     ghText("vzniky_hodinove.csv", POB), ghText("baseline_hodinove.csv", POB), ghText("distribucia_hodinove.csv", POB),
     ghText("kvalita_denne.csv", POB), ghText("vynimky.csv", POB), ghText("udalosti.csv", POB),
-    ghText("backlog.csv", POB), ghText("emaily.csv", POB),
+    ghText("backlog.csv", POB),
   ]);
-  const prijemcovia = parseCSV(emT).map((r) => r.email).filter((e) => e && e.includes("@"));
-  if (mailOk && !prijemcovia.length && !teamsUrl)
-    return Response.json({ error: "Žiadni príjemcovia." }, { status: 400 });
+
 
   const load = (txt) => dropIncompleteLastOpDay(opShift(parseCSV(txt)));
   const uda = parseCSV(udaT), vyn = parseCSV(vynT), vynD = vyn.map((v) => v.datum);
@@ -77,6 +73,12 @@ export async function GET(req) {
   const val = (daily, d) => daily.find((r) => r.datum === d)?.jbl ?? null;
   const vDen = val(vD, den), vTyz = val(vD, tyzden), tDen = val(tD, den), dDen = val(dD, den);
   const ocak = expectedFor(den, M, uda);
+
+  // report má zmysel len s dátami za predchádzajúci deň – inak počká na ďalší pokus
+  const vcera = iso(new Date(Date.now() - 86400000));
+  if (den < vcera && !process.env.REPORT_VZDY) {
+    return Response.json({ preskocene: true, dovod: "chýbajú dáta za predchádzajúci deň", posledne: den, ocakavane: vcera });
+  }
 
   const kvR = parseCSV(kvT);
   const kvDen = [...new Set(kvR.map((r) => r.datum))].sort().pop();
@@ -96,6 +98,15 @@ export async function GET(req) {
   const vyhlad = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(den, i + 1);
     return `${fmtD(d)} ${DNI[dow(d)]}: ${nf(predictDay(d, M, uda))}`;
+  });
+
+  // stĺpec s popisom, veľkou hodnotou a poznámkou
+  const stlpec = (nazov, hodnota, poznamka, farba = "Default") => ({
+    type: "Column", width: "stretch", items: [
+      { type: "TextBlock", text: nazov, size: "Small", isSubtle: true, wrap: true, spacing: "None" },
+      { type: "TextBlock", text: hodnota, size: "ExtraLarge", weight: "Bolder", spacing: "None", color: farba },
+      ...(poznamka ? [{ type: "TextBlock", text: poznamka, size: "Small", isSubtle: true, wrap: true, spacing: "None" }] : []),
+    ],
   });
 
   const riadok = (a, b) => `<tr><td style="padding:6px 12px 6px 0;color:#555">${a}</td><td style="padding:6px 0;font-weight:600">${b}</td></tr>`;
@@ -120,7 +131,7 @@ export async function GET(req) {
   </div>`;
 
   const nadpis = `Prehľad ${POB} · ${fmtD(den)}${den.slice(0, 4)} (${DNI[dow(den)]})`;
-  const vysledok = { den, teams: null, mail: null };
+  const vysledok = { den, teams: null };
 
   // --- Microsoft Teams (Adaptive Card cez webhook) ---
   if (teamsUrl) {
@@ -133,19 +144,45 @@ export async function GET(req) {
           $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
           type: "AdaptiveCard", version: "1.4",
           body: [
-            { type: "TextBlock", text: nadpis, weight: "Bolder", size: "Medium", wrap: true },
-            { type: "TextBlock", text: "prevádzkový deň 06:00–06:00", isSubtle: true, spacing: "None", wrap: true },
-            { type: "FactSet", facts: [
-              fakt("Objem (vzniky)", `${nf(vDen)}${vTyz ? ` (${pct((vDen / vTyz - 1) * 100)} vs. minulý týždeň)` : ""}`),
-              fakt("Expedícia (triedenie)", tDen != null ? nf(tDen) : "dáta zatiaľ nie sú"),
-              fakt("Distribúcia", nf(dDen)),
-              fakt("Presnosť predikcie", vDen != null ? `${pct((vDen / ocak - 1) * 100)} (model čakal ${nf(ocak)})` : "–"),
-              fakt("Otvorený backlog", `${nf(bkObjem)} JBL`),
+            // hlavička
+            { type: "Container", style: "emphasis", bleed: true, items: [
+              { type: "TextBlock", text: `PREDIKCIA ${POB}`, weight: "Bolder", size: "Large", wrap: true, spacing: "None" },
+              { type: "TextBlock", text: `${fmtD(den)}${den.slice(0, 4)} (${DNI[dow(den)]}) · prevádzkový deň 06:00–06:00`,
+                isSubtle: true, spacing: "None", wrap: true },
             ] },
-            { type: "TextBlock", text: `**Kvalita · ${fmtD(kvDen)}**`, wrap: true, spacing: "Medium" },
-            { type: "FactSet", facts: kvality.map(([nz, v]) => fakt(nz, v != null ? v.toFixed(1) + " %" : "–")) },
-            { type: "TextBlock", text: "**Výhľad na 7 dní**", wrap: true, spacing: "Medium" },
-            { type: "TextBlock", text: vyhlad.join("\n\n"), wrap: true, isSubtle: true },
+
+            // hlavné čísla v dvoch stĺpcoch
+            { type: "ColumnSet", spacing: "Medium", columns: [
+              stlpec("Objem (vzniky)", nf(vDen), vTyz ? `${pct((vDen / vTyz - 1) * 100)} vs. minulý týždeň` : null,
+                vTyz ? (vDen >= vTyz ? "Good" : "Warning") : "Default"),
+              stlpec("Expedícia (triedenie)", tDen != null ? nf(tDen) : "–",
+                tDen != null ? (dDen != null ? `distribúcia ${nf(dDen)}` : null) : "dáta zatiaľ nie sú"),
+            ] },
+            { type: "ColumnSet", columns: [
+              stlpec("Presnosť predikcie", vDen != null ? pct((vDen / ocak - 1) * 100) : "–",
+                `model čakal ${nf(ocak)}`,
+                vDen != null && Math.abs(vDen / ocak - 1) <= 0.08 ? "Good" : "Warning"),
+              stlpec("Otvorený backlog", `${nf(bkObjem)}`, "JBL na prenos", bkObjem > 0 ? "Warning" : "Default"),
+            ] },
+
+            // kvalita
+            { type: "TextBlock", text: `KVALITA · ${fmtD(kvDen)}`, weight: "Bolder", size: "Small",
+              spacing: "Medium", separator: true, color: "Accent" },
+            { type: "ColumnSet", columns: kvality.map(([nz, v]) => ({
+              type: "Column", width: "stretch", items: [
+                { type: "TextBlock", text: nz, size: "Small", isSubtle: true, wrap: true, spacing: "None" },
+                { type: "TextBlock", text: v != null ? v.toFixed(1) + " %" : "–", weight: "Bolder", spacing: "None",
+                  color: v == null ? "Default" : v >= 99 ? "Good" : v >= 98 ? "Warning" : "Attention" },
+              ],
+            })) },
+
+            // výhľad
+            { type: "TextBlock", text: "VÝHĽAD NA 7 DNÍ", weight: "Bolder", size: "Small",
+              spacing: "Medium", separator: true, color: "Accent" },
+            { type: "FactSet", spacing: "Small", facts: vyhlad.map((v) => {
+              const [den7, hodnota] = v.split(": ");
+              return { title: den7, value: hodnota };
+            }) },
           ],
           actions: process.env.APP_URL
             ? [{ type: "Action.OpenUrl", title: "Otvoriť prehľad v appke", url: process.env.APP_URL }]
@@ -159,16 +196,6 @@ export async function GET(req) {
     vysledok.teams = rt.ok ? "ok" : `chyba ${rt.status}`;
   }
 
-  // --- e-mail (Resend) ---
-  if (mailOk && prijemcovia.length) {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: prijemcovia, subject: nadpis, html }),
-    });
-    vysledok.mail = r.ok ? `ok (${prijemcovia.length})` : `chyba ${r.status}`;
-  }
-
-  const zlyhalo = [vysledok.teams, vysledok.mail].some((x) => x && x.startsWith("chyba"));
+  const zlyhalo = Boolean(vysledok.teams && vysledok.teams.startsWith("chyba"));
   return Response.json(vysledok, { status: zlyhalo ? 502 : 200 });
 }
