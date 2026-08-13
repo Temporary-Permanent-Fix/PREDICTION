@@ -1048,7 +1048,7 @@ function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, k
             sub={`${t("model čakal")} ${nf.format(ocak)}`} />
           <Card lbl={t("Hodiny potrebné / spálené")}
             val={needSum > 0 ? <>{nf.format(needSum)} <span style={{ color: "var(--muted)" }}>/</span> <span className={hCls(pomerSum)}>{nf.format(burnSum)}</span></> : "–"}
-            sub={pomerSum != null ? `${nf1.format(pomerSum)} % ${t("normy")}` : t("doplň výkony v záložke Výkony")} />
+            sub={pomerSum != null ? `${nf1.format(pomerSum)} % ${t("normy")}` : t("doplň výkony v záložke Admin")} />
         </div>
 
         <div className="grid g4" style={{ marginTop: 10 }}>
@@ -1132,7 +1132,7 @@ function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, k
         <p className="note">{t("Outlook: appka skopíruje obrázok do schránky a otvorí rozpísaný e-mail s číslami – obrázok doň vlož cez Ctrl+V. Odosiela sa z tvojho konta, takže adresát vidí teba ako odosielateľa.")}</p>
         {emaily.length ? (
           <>
-            <p className="note">{t("Vyber príjemcov (spravujú sa v záložke Výkony):")}</p>
+            <p className="note">{t("Vyber príjemcov (spravujú sa v záložke Admin):")}</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
               {emaily.map((e) => {
                 const on = vybrane.includes(e.email);
@@ -1146,17 +1146,20 @@ function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, k
                 );
               })}
             </div>
-            <button className="btn" disabled={!vybrane.length || posielam} onClick={posli}>
-              <Ico n="mail" />{posielam ? t("Odosielam…") : `${t("Poslať e-mailom")} (${vybrane.length})`}
-            </button>
+            <div className="frm">
+              <button className="btn" disabled={!vybrane.length || posielam} onClick={posli}>
+                <Ico n="mail" />{posielam ? t("Odosielam…") : (vybrane.length ? `${t("Poslať e-mailom")} (${vybrane.length})` : t("Poslať e-mailom"))}
+              </button>
+              {!vybrane.length && <span className="note" style={{ alignSelf: "center", margin: 0 }}>{t("Označ aspoň jedného príjemcu kliknutím na meno.")}</span>}
+            </div>
           </>
-        ) : <p className="note">{t("Žiadni príjemcovia – pridaj ich v záložke Výkony.")}</p>}
+        ) : <p className="note">{t("Žiadni príjemcovia – pridaj ich v záložke Admin.")}</p>}
       </div>
     </>
   );
 }
 
-// ------------------------------------------------------------ Záťaž dňa
+// ------------------------------------------------------------ Perfo
 // Koľko treba dnes odoslať: väčšina objemu vznikla v predchádzajúcich dňoch
 // a je teda už známa – neodhaduje sa, počíta sa z matice zvozov.
 function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
@@ -1289,7 +1292,7 @@ function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
               <div className="grid g4">
                 <Card lbl={t("Potrebné")} val={hodinySpolu ? nf1.format(hodinySpolu) + " h" : "–"} sub={t("z objemu a výkonov")} />
                 <Card lbl={t("Odpracované")} val={nf1.format(spalene) + " h"} cls={hCls(pomer)}
-                  sub={pomer != null ? `${nf1.format(pomer)} % ${t("normy")}` : t("doplň výkony v záložke Výkony")} />
+                  sub={pomer != null ? `${nf1.format(pomer)} % ${t("normy")}` : t("doplň výkony v záložke Admin")} />
                 <Card lbl={t("Rozdiel")} val={hodinySpolu ? (spalene - hodinySpolu >= 0 ? "+" : "") + nf1.format(spalene - hodinySpolu) + " h" : "–"}
                   cls={hCls(pomer)} sub={t("odpracované − potrebné")} />
                 <Card lbl={t("Osôb-zmien (11 h)")} val={nf1.format(spalene / 11)} sub={`~${nf1.format(spalene / 11 / 2)} ${t("ľudí na zmenu")}`} />
@@ -1324,7 +1327,7 @@ function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
             <Card lbl={t("Na zostávajúci objem")} val={hodinyZvysok != null ? nf1.format(hodinyZvysok) + " h" : "–"} cls="accent"
               sub={hodinyZvysok != null ? `≈ ${nf1.format(hodinyZvysok / 11)} ${t("osôb-zmien")}` : t("dáta triedenia zatiaľ nie sú")} />
           </div>
-        ) : <p className="note">{t("doplň výkony v záložke Výkony")}</p>}
+        ) : <p className="note">{t("doplň výkony v záložke Admin")}</p>}
       </div>
     </>
   );
@@ -1548,7 +1551,7 @@ function TabVykony({ kpi, setKpi, save, emaily, setEmaily, prahyR, setPrahy, pra
           <button className="btn ghost" onClick={zamkni}><Ico n="lock" />{t("Zamknúť")}</button>
         </div>
       )}
-      <p className="note">{t("Plošné výkony (JBL na osobu a hodinu) platia pre všetky dni – používa ich Predikcia (hodiny na spracovanie), KPI aj backlog. Úpravy pre konkrétne dni sa spravujú v záložke KPI a majú pred plošnými prednosť.")}</p>
+      <p className="note">{t("Plošné výkony (JBL na osobu a hodinu) platia pre všetky dni – používa ich Predikcia, Perfo aj prepočet backlogu. Úpravu pre konkrétny deň zadáš nižšie a má pred plošnou prednosť.")}</p>
       <table className="t" style={{ maxWidth: 560 }}>
         <thead><tr><th>{t("Proces")}</th><th>{t("Aktuálne uložené")}</th><th>{t("Nová hodnota")}</th></tr></thead>
         <tbody>
@@ -1570,7 +1573,7 @@ function TabVykony({ kpi, setKpi, save, emaily, setEmaily, prahyR, setPrahy, pra
 
       <div className="section">
         <h3>{t("Úprava výkonu pre konkrétny deň")}</h3>
-        <p className="note">{t("Prepíše plošný výkon len pre vybraný deň (zaučanie, oslabená zmena). Používa ju Záťaž dňa aj Prehľad.")}</p>
+        <p className="note">{t("Prepíše plošný výkon len pre vybraný deň (zaučanie, oslabená zmena). Používa ju Perfo aj Prehľad.")}</p>
         <div className="frm">
           <div className="fld"><label>{t("Deň")}</label>
             <input type="date" disabled={!odomknute} value={denDatum} onChange={(e) => { setDenDatum(e.target.value); setDenne(null); }} /></div>
