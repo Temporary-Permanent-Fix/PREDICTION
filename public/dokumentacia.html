@@ -248,57 +248,40 @@ a{color:var(--green2)}
 <p>Oba smery majú rozpad podľa protistrany aj podľa veľkosti (geosize).</p>
 <hr />
 <h2 id="13-kapacitny-prepocet-a-prahy">13. Kapacitný prepočet a prahy</h2>
-<pre><code>človekohodiny = objem ÷ výkon (JBL na osobu a hodinu)
-</code></pre>
-<p>Výkony sa zadávajú v <strong>Admine</strong> — plošné a zvlášť úprava pre konkrétny deň (denná má prednosť). Objemy procesov sa odvodzujú z triedenia cez pomery z posledných 60 dní. Prepočet na ľudí: 11 hodín čistého času na zmenu, 2 zmeny denne.</p>
+<pre><code>človekohodiny = objem procesu ÷ výkon (JBL na osobu a hodinu)</code></pre>
+<p>Sledované procesy: <strong>Príjem, Potvrdenie, Pick, Pack, Sort</strong>. Objemy sa odvodzujú takto:</p>
+<table>
+<thead><tr><th>Proces</th><th>Objem</th></tr></thead>
+<tbody>
+<tr><td>Pick, Pack, Sort</td><td>z triedenia cez pomery za posledných 60 dní</td></tr>
+<tr><td>Príjem</td><td>skutočnosť, inak predikcia príjmu</td></tr>
+<tr><td>Potvrdenie</td><td>objem príjmu × pomer z výkazu (aktuálne 1,04)</td></tr>
+</tbody></table>
+<p><strong>Výkon</strong> sa berie z normy nastavenej v Admine. Ak norma nie je zadaná, appka použije <strong>skutočný priemer z výkazu odpracovaných hodín za posledných 60 dní</strong> a označí ho hviezdičkou. V Admine sú norma aj skutočnosť vedľa seba vrátane odchýlky.</p>
+<p>Skutočné výkony SKLC3 za 60 dní: Pack 640, Sort 176, Pick 153, Potvrdenie 80, Príjem 71 JBL/h.</p>
+<p><strong>Pozor na Pick:</strong> hodnota 153 je vážený priemer AutoStore a manuálnej zóny. Keď sa ich pomer zmení, výkon klesne bez toho, aby ktokoľvek pracoval horšie. Presné meranie si vyžaduje rozpad objemu aj hodín podľa zóny — v súčasných exportoch nie je dostupný.</p>
+<p>Prepočet na ľudí: 11 hodín čistého času na zmenu, 2 zmeny denne. Hodiny na zostávajúci objem sa počítajú len z expedičných procesov (Pick, Pack, Sort) — príjem s odoslaním nesúvisí.</p>
 <p><strong>Prahy zobrazenia</strong> (Admin): kvalita zelená od 99 %, jantárová od 98 %; hodiny zelená do 105 % normy, jantárová do 115 %.</p>
-<hr />
+
 <h2 id="14-admin">14. Admin</h2>
 <p>Chránená sekcia — heslo si vypýta hneď po kliknutí, platí do zatvorenia karty prehliadača. Obsahuje plošné výkony, úpravu výkonu pre konkrétny deň, prahy zobrazenia, citlivosť upozornení a príjemcov reportu.</p>
 <hr />
-<h2 id="15-import-dat">15. Import dát</h2>
-<p>Typ sa rozpozná <strong>podľa obsahu, nie podľa názvu</strong>. Viac súborov naraz aj zošit s viacerými hárkami.</p>
+<h2 id="15-import-dat">15. Import dát — návod</h2>
+<p><strong>Na názve súboru nezáleží.</strong> Appka rozpoznáva typ exportu <strong>podľa obsahu</strong> — podľa stĺpcov a filtrov v hlavičke. Súbory si teda môžeš pomenovať ľubovoľne, dôležité je, aby si ich exportoval zo správneho reportu a so správnymi filtrami. Naraz sa dá vybrať viac súborov aj zošit s viacerými hárkami.</p>
 <table>
-<thead>
-<tr>
-<th>Export</th>
-<th>Čo z neho vznikne</th>
-</tr>
-</thead>
+<thead><tr><th>Export</th><th>Odkiaľ</th><th>Ako</th><th>Čo z neho vznikne</th></tr></thead>
 <tbody>
-<tr>
-<td>OLAP_PREDICTION</td>
-<td>vzniky, matica zvozov</td>
-</tr>
-<tr>
-<td>VOLUMES</td>
-<td>príjem, triedenie, pomery procesov</td>
-</tr>
-<tr>
-<td>QUALITY</td>
-<td>kvalita denne a po hodinách</td>
-</tr>
-<tr>
-<td>SJL ManHours</td>
-<td>odpracované hodiny po procesoch</td>
-</tr>
-<tr>
-<td>Vyložené palety a plán</td>
-<td>avíza dodávok (rozdelia sa podľa pobočiek)</td>
-</tr>
-<tr>
-<td>DFS TO/FROM LC</td>
-<td>distribúcia (rozdelia sa podľa pobočiek)</td>
-</tr>
-<tr>
-<td>Kalendár zmien</td>
-<td>rozpis operation managerov</td>
-</tr>
-</tbody>
-</table>
-<p>Import prepisuje súbory <strong>celé</strong>. Zaškrtávacie pole umožňuje pred nahratím vyčistiť ručne zadané dáta (záznamy, výnimky, backlog); nastavenia zostávajú.</p>
-<p><strong>Poznámka:</strong> OLAP export má filter na pobočku — pri importe musí byť hore vybraná tá istá pobočka, ktorej sa export týka.</p>
-<hr />
+<tr><td>QUALITY</td><td>BRFIL161699</td><td>exportovať samostatne</td><td>kvalita denne a po hodinách</td></tr>
+<tr><td>VOLUMES</td><td>BRFIL161699</td><td>exportovať samostatne</td><td>príjem, triedenie, pomery procesov</td></tr>
+<tr><td>ManHours</td><td>Power BI · Logistics · <em>LOGPerformance</em></td><td>Branch = pobočka (Warehouse → SKLC3); Směr aj SJL Process nechať bez obmedzenia; dátumový rozsah podľa potreby</td><td>odpracované hodiny a skutočný výkon po procesoch</td></tr>
+<tr><td>GateBooking</td><td>Power BI · Logistics · <em>GateBooking</em></td><td>report „Vyložených palet a plán“; obsahuje všetky pobočky naraz a rozdelí sa automaticky</td><td>avíza dodávok</td></tr>
+<tr><td>DFR / DFS</td><td>Power BI · Logistics · <em>DistributionStoreJobLines</em></td><td>musí obsahovať týždeň a deň v týždni — agregát bez časovej dimenzie sa nedá použiť na predikciu</td><td>distribúcia medzi pobočkami (In / Out)</td></tr>
+<tr><td>OLAP_PREDICTION</td><td>kontingenčná tabuľka</td><td>má filter na pobočku — nahrávaj vždy s rovnakou pobočkou zvolenou hore v appke</td><td>vzniky, matica zvozov</td></tr>
+<tr><td>Kalendár zmien</td><td>Excel rozpis</td><td>zlúčené bunky s menami nad dátumami</td><td>rozpis operation managerov</td></tr>
+</tbody></table>
+<p>V Power BI sa exportuje cez <strong>Explore → export do Excelu</strong>. Pred exportom skontroluj rozsah dátumu — appka spracuje len to, čo je v súbore.</p>
+<p>Import prepisuje súbory <strong>celé</strong>: čo v exporte nie je, zostáva pôvodné. Zaškrtávacie pole umožňuje pred nahratím vyčistiť ručne zadané dáta (záznamy, výnimky, backlog); nastavenia zostávajú.</p>
+
 <h2 id="16-denny-report-do-teams">16. Denný report do Teams</h2>
 <p>Cron pošle kartu s číslami za predchádzajúci deň o <strong>6:00</strong> miestneho času (letný aj zimný čas rieši appka sama). Ak dáta za predchádzajúci deň ešte nie sú, report sa preskočí a skúsi to znova o hodinu, až do 9:00.</p>
 <p>Premenné vo Verceli: <code>TEAMS_WEBHOOK</code>, <code>APP_URL</code>, <code>REPORT_POBOCKA</code>, <code>CRON_SECRET</code>.</p>
@@ -425,6 +408,8 @@ a{color:var(--green2)}
 <li><strong>Časy LT a ČS nie sú v exportoch</strong> — appka má len výsledok kvality, nie konkrétne limity pri zvozoch. Upozornenia preto rozlišujú úrovne podľa voľnej kapacity.</li>
 <li><strong>Promo akcie pokrývajú 56 % dní</strong> (v júni 100 %), takže ich efekt sa dá merať len veľmi hrubo. Koeficienty v Udalostiach ber ako orientačné.</li>
 <li><strong>Rozpad kvality podľa zmien nie je vážený</strong> objemom ani náročnosťou dní.</li>
+<li><strong>Pick a Potvrdenie sa merajú spoločne za celý sklad.</strong> Pick zahŕňa AutoStore aj manuálnu zónu, Potvrdenie bežný tovar aj vratky — výkon je preto vážený priemer. Rozpad si vyžaduje doplniť dimenziu zóny do exportov VOLUMES aj ManHours.</li>
+<li><strong>Objem potvrdzovania sa berie z výkazu ManHours</strong>, nie z VOLUMES — tam je stĺpec „3. Confirmed" vyplnený len do 8. 10. 2025.</li>
 <li><strong>Príjem sa predikuje horšie</strong> — zlepšenie by prinieslo avízo v kusoch namiesto paliet.</li>
 <li><strong>Sklad je stále v raste.</strong> Od otvorenia 1. 9. 2025 rástol objem z nuly na ~85 tis./deň. Skokové zmeny v marci, apríli a máji 2026 sa nedali spoľahlivo odlíšiť od pokračujúceho nábehu — ak o niektorej vieš, že išlo o trvalé prevzatie objemu, zadaj ju ako zlom.</li>
 </ol>

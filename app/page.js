@@ -4,7 +4,7 @@ import { parseCSV, toCSV } from "../lib/csv";
 import {
   TYPY_VYNIMIEK, TYPY_UDALOSTI, buildDaily, mergedHourly, fitModel, predictDay,
   expectedFor, hourlyProfile, eventMult, intraday,
-  addDays, dow, DNI, fmtD, iso, opShift, OP_HOURS, OP_START, dropIncompleteLastOpDay, opIdx, opIdxEnd, backtest, parseVynimky, adjustPartialDays, predictPrijemZAviza, dfsDenne, dfsRozpad, aplikujZlomy, koefZlomu,
+  addDays, dow, DNI, fmtD, iso, opShift, OP_HOURS, OP_START, dropIncompleteLastOpDay, opIdx, opIdxEnd, backtest, parseVynimky, adjustPartialDays, predictPrijemZAviza, skutocnyVykon, pomerKPrijmu, dfsDenne, dfsRozpad, aplikujZlomy, koefZlomu,
 } from "../lib/model";
 import { t, setLang, JAZYKY } from "../lib/preklady";
 
@@ -413,6 +413,7 @@ export default function Page() {
   setLang(jazyk);
   const trendPct = model.slope >= 0 ? "up" : "down";
   const STANDALONE = ["prehlad", "upoz", "zataz", "kvalita", "zmeny", "udal", "model", "import", "admin", "dfs"];
+  const NASTROJE = [["model", "Model"], ["import", "Dáta"], ["admin", "Admin"]];
   const naZdroji = !STANDALONE.includes(tab);
 
   const prepniZdroj = (key) => {
@@ -422,6 +423,13 @@ export default function Page() {
   return (
     <div className="shell">
       <div className="masthead">
+        <div className="nastroje">
+          {NASTROJE.map(([k, l]) => (
+            <button key={k} className={`${tab === k ? "on" : ""}${k === "admin" ? " admin" : ""}`} onClick={() => setTab(k)}>
+              <Ico n={k} />{t(l)}
+            </button>
+          ))}
+        </div>
         <div className="eyebrow"><span className="livedot" /> {pobocka} · {t("LOGISTIKA")}</div>
         <h1>{t("PREDIKCIA")} {pobocka}</h1>
         <div className="tagline">{t("Predikcia objemov, kapacít a kvality")}</div>
@@ -454,8 +462,8 @@ export default function Page() {
             <button key={k} className={naZdroji && src === k ? "on" : ""} onClick={() => prepniZdroj(k)}><Ico n={k} />{t(l)}</button>)}
           <button className={tab === "dfs" ? "on" : ""} onClick={() => setTab("dfs")}><Ico n="distribucia" />{t("Distribúcia")}</button>
           <span style={{ alignSelf: "center", color: "var(--border)", padding: "0 2px", userSelect: "none" }}>│</span>
-          {[["prehlad", "Prehľad"], ["upoz", "Upozornenia"], ["zataz", "Perfo"], ["kvalita", "Kvalita"], ["zmeny", "Zmeny"], ["udal", "Udalosti"], ["model", "Model"], ["import", "Dáta"], ["admin", "Admin"]].map(([k, l]) =>
-            <button key={k} className={`${tab === k ? "on" : ""}${k === "admin" ? " admin" : ""}`} onClick={() => setTab(k)}><Ico n={k} />{t(l)}</button>)}
+          {[["prehlad", "Prehľad"], ["upoz", "Upozornenia"], ["zataz", "Perfo"], ["kvalita", "Kvalita"], ["zmeny", "Zmeny"], ["udal", "Udalosti"]].map(([k, l]) =>
+            <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}><Ico n={k} />{t(l)}</button>)}
         </div>
         <div className="langsw" role="group" aria-label="Jazyk / Language">
           <Ico n="jazyk" />
@@ -492,7 +500,7 @@ export default function Page() {
       {tab === "zataz" && <TabZataz manhours={manhours} V={V} TP={TP} staticData={staticData} uda={uda} kpi={kpi} backlogy={backlogy} prahy={prahy} />}
       {tab === "kvalita" && <TabKvalita staticData={staticData} prahy={prahy} />}
       {tab === "zmeny" && <TabZmeny staticData={staticData} zmeny={zmeny} setZmeny={setZmeny} manazeri={manazeri} save={save} prahy={prahy} />}
-      {tab === "admin" && <TabVykony kpi={kpi} setKpi={setKpi} save={save} emaily={emaily} setEmaily={setEmaily} prahyR={prahyR} setPrahy={setPrahy} prahy={prahy} chranene={chranene} heslo={heslo} setHeslo={setHeslo} show={show} />}
+      {tab === "admin" && <TabVykony manhours={manhours} kpi={kpi} setKpi={setKpi} save={save} emaily={emaily} setEmaily={setEmaily} prahyR={prahyR} setPrahy={setPrahy} prahy={prahy} chranene={chranene} heslo={heslo} setHeslo={setHeslo} show={show} />}
       {tab === "import" && <TabImport saveRaw={saveRaw} saveRawDo={saveRawDo} show={show} ghOk={ghOk} />}
       {tab === "model" && <TabModel sources={{ vzniky: { ...V, vynD: vynimky.map((v) => v.datum) }, triedenie: TP.triedenie, prijem: TP.prijem }} vynD={vynimky.map((v) => v.datum)} uda={uda} />}
 
@@ -1251,15 +1259,32 @@ function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
     return g && +g.vykon > 0 ? +g.vykon : 0;
   };
   const pom = staticData.pomery || {};
-  const coef = ["Pick", "Pack", "Sort"].reduce((a, p) => a + (vykonPre(p) > 0 ? (pom[p] ?? 1) / vykonPre(p) : 0), 0);
-  const potrebnePre = (proces) => {
-    const v = vykonPre(proces);
-    if (!(v > 0)) return null;
-    if (proces === "Príjem") return (TP.prijem.daily.find((r) => r.datum === datum)?.jbl ?? 0) / v;
-    return (spolu * (pom[proces] ?? 1)) / v;
+  const PROC_VSETKY = ["Príjem", "Potvrdenie", "Pick", "Pack", "Sort"];
+  // výkon: prednosť má nastavená norma, inak skutočnosť z výkazu (60 dní)
+  const vykonEfekt = (proces) => {
+    const norma = vykonPre(proces);
+    if (norma > 0) return { v: norma, zdroj: "norma" };
+    const s = skutocnyVykon(manhours, proces);
+    return s ? { v: s.vykon, zdroj: "skutočnosť" } : null;
   };
-  const hodinySpolu = coef > 0 ? spolu * coef : null;
-  const hodinyZvysok = coef > 0 && zostava != null ? zostava * coef : null;
+  const prijemDen = TP.prijem.daily.find((r) => r.datum === datum)?.jbl
+    ?? (TP.prijem.model ? predictDay(datum, TP.prijem.model, uda) : null);
+  const pomerPotvrd = pomerKPrijmu(manhours, "Potvrdenie") ?? 1.04;
+  const objemPre = (proces) => {
+    if (proces === "Príjem") return prijemDen;
+    if (proces === "Potvrdenie") return prijemDen != null ? prijemDen * pomerPotvrd : null;
+    return spolu * (pom[proces] ?? 1);
+  };
+  const potrebnePre = (proces) => {
+    const e = vykonEfekt(proces), o = objemPre(proces);
+    return e && o != null ? o / e.v : null;
+  };
+  const hodinySpolu = PROC_VSETKY.reduce((a, p) => a + (potrebnePre(p) ?? 0), 0) || null;
+  // zvyšok sa počíta len z expedičných procesov (príjem nesúvisí s odoslaním)
+  const coefExp = ["Pick", "Pack", "Sort"].reduce((a, p) => {
+    const e = vykonEfekt(p); return a + (e ? (pom[p] ?? 1) / e.v : 0);
+  }, 0);
+  const hodinyZvysok = coefExp > 0 && zostava != null ? zostava * coefExp : null;
 
   return (
     <>
@@ -1349,7 +1374,8 @@ function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
                 <Card lbl={t("Osôb-zmien (11 h)")} val={nf1.format(spalene / 11)} sub={`~${nf1.format(spalene / 11 / 2)} ${t("ľudí na zmenu")}`} />
               </div>
               <table className="t" style={{ marginTop: 10 }}>
-                <thead><tr><th>{t("Proces")}</th><th style={{ textAlign: "right" }}>{t("Potreb. h")}</th>
+                <thead><tr><th>{t("Proces")}</th><th style={{ textAlign: "right" }}>{t("Výkon")}</th>
+                  <th style={{ textAlign: "right" }}>{t("Potreb. h")}</th>
                   <th style={{ textAlign: "right" }}>{t("Odpracované h")}</th><th style={{ textAlign: "right" }}>{t("Rozdiel")}</th></tr></thead>
                 <tbody>{mh.sort((a, b) => (a.proces < b.proces ? -1 : 1)).map((m) => {
                   const potr = potrebnePre?.(m.proces) ?? null;
@@ -1357,6 +1383,9 @@ function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
                   return (
                     <tr key={m.proces}>
                       <td style={{ fontFamily: "var(--sans)" }}>{m.proces}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {(() => { const e = vykonEfekt(m.proces); return e ? <>{nf.format(e.v)}{e.zdroj === "skutočnosť" && <span style={{ color: "var(--muted)" }}> *</span>}</> : "–"; })()}
+                      </td>
                       <td style={{ textAlign: "right" }}>{potr ? nf1.format(potr) : "–"}</td>
                       <td className={hCls(p)} style={{ textAlign: "right" }}>{nf1.format(+m.hodiny)}</td>
                       <td className={hCls(p)} style={{ textAlign: "right" }}>{potr ? ((+m.hodiny - potr >= 0 ? "+" : "") + nf1.format(+m.hodiny - potr)) : "–"}</td>
@@ -1364,6 +1393,9 @@ function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
                   );
                 })}</tbody>
               </table>
+              <p className="note" style={{ marginBottom: 0 }}>
+                {t("* výkon nie je zadaný ako norma – použitý je skutočný priemer z výkazu za posledných 60 dní. Normy sa nastavujú v Admine.")}
+              </p>
             </>
           );
         })()}
@@ -1371,11 +1403,11 @@ function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
 
       <div className="section">
         <h3>{t("Potrebné hodiny")}</h3>
-        {coef > 0 ? (
+        {hodinySpolu ? (
           <div className="grid g4">
             <Card lbl={t("Na celý deň")} val={nf1.format(hodinySpolu) + " h"}
               sub={`≈ ${nf1.format(hodinySpolu / 11)} ${t("osôb-zmien")}`} />
-            <Card lbl={t("Na zostávajúci objem")} val={hodinyZvysok != null ? nf1.format(hodinyZvysok) + " h" : "–"} cls="accent"
+            <Card lbl={t("Na zostávajúci objem (expedícia)")} val={hodinyZvysok != null ? nf1.format(hodinyZvysok) + " h" : "–"} cls="accent"
               sub={hodinyZvysok != null ? `≈ ${nf1.format(hodinyZvysok / 11)} ${t("osôb-zmien")}` : t("dáta triedenia zatiaľ nie sú")} />
           </div>
         ) : <p className="note">{t("doplň výkony v záložke Admin")}</p>}
@@ -1489,8 +1521,8 @@ function TabKvalita({ staticData, prahy }) {
 }
 
 // ------------------------------------------------------------ ⚙️ Výkony
-function TabVykony({ kpi, setKpi, save, emaily, setEmaily, prahyR, setPrahy, prahy, chranene, heslo, setHeslo, show }) {
-  const PROCESY = ["Príjem", "Pick", "Pack", "Sort"];
+function TabVykony({ kpi, setKpi, save, emaily, setEmaily, prahyR, setPrahy, prahy, chranene, heslo, setHeslo, show, manhours }) {
+  const PROCESY = ["Príjem", "Potvrdenie", "Pick", "Pack", "Sort"];
   const COLS = ["proces", "vykon", "datum"];
   const [glob, setGlob] = useState(null);
   const globVal = glob ?? Object.fromEntries(PROCESY.map((p) => {
@@ -1604,12 +1636,26 @@ function TabVykony({ kpi, setKpi, save, emaily, setEmaily, prahyR, setPrahy, pra
       )}
       <p className="note">{t("Plošné výkony (JBL na osobu a hodinu) platia pre všetky dni – používa ich Predikcia, Perfo aj prepočet backlogu. Úpravu pre konkrétny deň zadáš nižšie a má pred plošnou prednosť.")}</p>
       <table className="t" style={{ maxWidth: 560 }}>
-        <thead><tr><th>{t("Proces")}</th><th>{t("Aktuálne uložené")}</th><th>{t("Nová hodnota")}</th></tr></thead>
+        <thead><tr><th>{t("Proces")}</th><th>{t("Aktuálne uložené")}</th><th>{t("Skutočnosť (60 dní)")}</th><th>{t("Nová hodnota")}</th></tr></thead>
         <tbody>
           {PROCESY.map((p) => (
             <tr key={p}>
               <td style={{ fontFamily: "var(--sans)", fontWeight: 600 }}>{p}</td>
               <td className={ulozene(p) ? "accent" : ""} style={{ fontWeight: 650 }}>{ulozene(p) ?? <span className="pill red">{t("nenastavené")}</span>}</td>
+              <td>{(() => {
+                const s = skutocnyVykon(manhours, p);
+                if (!s) return <span style={{ color: "var(--muted)" }}>–</span>;
+                const norma = ulozene(p);
+                const odch = norma ? (s.vykon / norma - 1) * 100 : null;
+                return (
+                  <>
+                    <b>{nf.format(s.vykon)}</b>
+                    {odch != null && <span className={Math.abs(odch) <= 10 ? "accent" : Math.abs(odch) <= 25 ? "warn" : "bad"} style={{ marginLeft: 6, fontSize: 12 }}>
+                      {odch >= 0 ? "+" : ""}{nf.format(odch)} %
+                    </span>}
+                  </>
+                );
+              })()}</td>
               <td><input type="number" min="0" placeholder={odomknute ? t("zadaj") : t("zamknuté")} style={{ ...inp, opacity: odomknute ? 1 : 0.5 }}
                 disabled={!odomknute} value={globVal[p]}
                 onChange={(e) => setGlob({ ...globVal, [p]: e.target.value })} /></td>
@@ -2141,17 +2187,33 @@ function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
   return (
     <>
       <p className="note">{t("Nahraj Excel exporty a appka si z nich sama pripraví dátové súbory. Typ rozpozná podľa obsahu, nie podľa názvu – môžeš ich vybrať aj všetky naraz. Zošit s viacerými hárkami spracuje celý.")}</p>
-      <table className="t" style={{ maxWidth: 620, marginBottom: 14 }}>
-        <thead><tr><th>{t("Export")}</th><th>{t("Čo z neho vznikne")}</th></tr></thead>
+      <p className="note" style={{ color: "var(--green2)" }}>
+        {t("Na názve súboru nezáleží – appka rozpoznáva typ podľa obsahu (stĺpcov a filtrov v hlavičke). Súbor si teda môžeš pomenovať ľubovoľne.")}
+      </p>
+      <table className="t" style={{ marginBottom: 8 }}>
+        <thead><tr><th>{t("Export")}</th><th>{t("Odkiaľ")}</th><th>{t("Čo z neho vznikne")}</th></tr></thead>
         <tbody>
-          <tr><td style={{ fontFamily: "var(--sans)" }}>OLAP_PREDICTION</td><td style={{ fontFamily: "var(--sans)" }}>{t("vzniky, distribúcia, matica zvozov")}</td></tr>
-          <tr><td style={{ fontFamily: "var(--sans)" }}>VOLUMES</td><td style={{ fontFamily: "var(--sans)" }}>{t("príjem, triedenie, pomery procesov")}</td></tr>
-          <tr><td style={{ fontFamily: "var(--sans)" }}>QUALITY</td><td style={{ fontFamily: "var(--sans)" }}>{t("kvalita denne a po hodinách")}</td></tr>
-          <tr><td style={{ fontFamily: "var(--sans)" }}>SJL ManHours</td><td style={{ fontFamily: "var(--sans)" }}>{t("odpracované hodiny po procesoch")}</td></tr>
-          <tr><td style={{ fontFamily: "var(--sans)" }}>{t("Vyložené palety a plán")}</td><td style={{ fontFamily: "var(--sans)" }}>{t("avíza dodávok – rozdelia sa podľa pobočiek")}</td></tr>
-          <tr><td style={{ fontFamily: "var(--sans)" }}>{t("Kalendár zmien")}</td><td style={{ fontFamily: "var(--sans)" }}>{t("rozpis operation managerov")}</td></tr>
+          {[
+            ["QUALITY", "BRFIL161699", t("kvalita denne a po hodinách"), t("exportovať samostatne")],
+            ["VOLUMES", "BRFIL161699", t("príjem, triedenie, pomery procesov"), t("exportovať samostatne")],
+            ["ManHours", "Power BI · LOGPerformance", t("odpracované hodiny a výkon po procesoch"), t("filter Branch = pobočka, Směr aj SJL Process bez obmedzenia")],
+            ["GateBooking", "Power BI · GateBooking", t("avíza dodávok – rozdelia sa podľa pobočiek"), t("obsahuje všetky pobočky naraz")],
+            ["DFR / DFS", "Power BI · DistributionStoreJobLines", t("distribúcia medzi pobočkami"), t("musí obsahovať týždeň a deň, inak sa nedá predikovať")],
+            ["OLAP_PREDICTION", t("kontingenčná tabuľka"), t("vzniky, matica zvozov"), t("filter na pobočku – nahrávaj pri zvolenej rovnakej pobočke")],
+            [t("Kalendár zmien"), t("Excel rozpis"), t("rozpis operation managerov"), ""],
+          ].map(([nazov, odkial, vysledok, pozn]) => (
+            <tr key={nazov}>
+              <td style={{ fontFamily: "var(--sans)", fontWeight: 600 }}>{nazov}</td>
+              <td style={{ fontFamily: "var(--sans)", color: "var(--muted)" }}>{odkial}</td>
+              <td style={{ fontFamily: "var(--sans)" }}>{vysledok}
+                {pozn ? <div style={{ fontSize: 11.5, color: "var(--amber)", marginTop: 2 }}>{pozn}</div> : null}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
+      <p className="note" style={{ marginBottom: 14 }}>
+        {t("Power BI: Explore → export do Excelu. Pred exportom skontroluj rozsah dátumu – appka spracuje len to, čo je v súbore.")}
+      </p>
 
       <div style={{ border: "1px dashed var(--border2)", borderRadius: "var(--r)", padding: "22px 18px", textAlign: "center", background: "var(--card)" }}
         onDragOver={(e) => e.preventDefault()}
