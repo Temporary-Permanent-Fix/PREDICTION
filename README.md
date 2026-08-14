@@ -1,45 +1,49 @@
-# JBL Predikcia · SKLC3 (Next.js / Vercel)
+# Predikcia — Alza LOG
 
-Webová appka na dennú a hodinovú predikciu jobline (vzniky aj triedenie),
-predikciu zvozov, intradenný prepočet, evidenciu anomálií a udalostí.
+Predikcia objemov, kapacít a kvality pre sklady SKLC3, CZLC4 a LCU.
+Next.js 14, nasadené na Vercel, dáta v tomto repozitári (`public/data/<POBOČKA>/`).
 
-## Nasadenie na Vercel
-1. Nahraj celý obsah do GitHub repa (napr. `kabatovaada/JBL_PREDIKCIA_WEB`).
-2. Na vercel.com → **Add New → Project** → importuj repo. Framework: Next.js (auto). Deploy.
-3. **Settings → Environment Variables** (pre ukladanie dát do GitHubu):
-   - `GH_TOKEN` – personal access token s právom *contents: read & write* na repo
-   - `GH_REPO` – `kabatovaada/JBL_PREDIKCIA_WEB`
-   - `GH_BRANCH` – `main` (voliteľné)
-   - `GH_DIR` – `public/data` (voliteľné)
-   Po pridaní premenných sprav **Redeploy**.
+**Príručka a dokumentácia modelu:** `public/dokumentacia.html` — po nasadení dostupná na
+`https://<adresa-appky>/dokumentacia.html`
 
-Bez env premenných appka beží tiež – zápisy platia len do obnovenia stránky.
+## Denná rutina
 
-## Poznámka k redeployom
-Každé uloženie záznamu commitne CSV do repa, čo štandardne spustí nový Vercel build.
-Ak tomu chceš zabrániť, nastav v **Settings → Git → Ignored Build Step**:
+1. Ráno nahrať exporty v záložke **Dáta** (OLAP, VOLUMES, QUALITY; podľa potreby ManHours, avíza, DFS).
+2. O 6:00 príde do Teams automatický report za predchádzajúci deň.
+3. Podľa potreby skontrolovať **Upozornenia** a potvrdiť presuny objemu.
+
+## Nastavenie prostredia (Vercel → Settings → Environment Variables)
+
+| Premenná | Účel |
+|---|---|
+| `GH_TOKEN` | fine-grained PAT, Resource owner = organizácia, Contents: Read and write |
+| `GH_REPO` | `organizácia/repozitár` |
+| `GH_BRANCH` | `main` |
+| `GH_DIR` | `public/data` |
+| `VYKONY_HESLO` | heslo do sekcie Admin |
+| `TEAMS_WEBHOOK` | webhook kanála pre denný report |
+| `APP_URL` | adresa appky (odkaz v reporte) |
+| `REPORT_POBOCKA` | pobočka pre denný report (predvolene SKLC3) |
+| `CRON_SECRET` | ochrana cron endpointu |
+
+Premenné sa načítajú až pri builde — po ich zmene je potrebný **Redeploy**.
+
+## Pridanie pobočky
+
+1. Doplniť riadok do `public/data/pobocky.csv`.
+2. Vytvoriť priečinok `public/data/<KÓD>/` s prázdnymi súbormi (hlavičky podľa existujúcej pobočky).
+3. V appke prepnúť na novú pobočku a nahrať exporty.
+
+## Štruktúra
+
 ```
-git diff --quiet HEAD^ HEAD -- ':!public/data'
+app/            stránka a API (gh, heslo, cron/report)
+lib/            model.js (predikcia), importuj.js (konvertory), preklady.js, csv.js
+public/data/    dáta po pobočkách
+public/dokumentacia.html
+vercel.json     plán cronu
 ```
-(build sa preskočí, keď sa zmenili len dátové súbory; appka číta dáta cez GitHub API,
-takže čerstvé dáta vidí aj bez rebuildu).
 
-## Dáta – hlavný zdroj je OLAP export
-Oba kľúčové súbory (`vzniky_hodinove.csv` aj `zvoz_matica.json`) sa generujú z jedného
-OLAP exportu skriptom `tools/olap_to_data.py`:
-```
-python tools/olap_to_data.py OLAP_PREDICTION.xlsx public/data
-```
-Skript sám vynechá neúplný posledný deň exportu a pri matici zvozov počíta len so
-vznikmi staršími ako 6 dní (aby zvozy stihli dobehnúť). Po vygenerovaní commitni
-oba súbory do repa.
+## Jazyky
 
-- `public/data/vzniky_hodinove.csv` – vzniky jobline po hodinách (z OLAP)
-- `public/data/baseline_hodinove.csv` – triedenie po hodinách (2–6/2026)
-- `public/data/zvoz_matica.json` – konverzná matica vznik→zvoz z OLAP (expFrac, D0–D3+, hodinový profil zvozov)
-- `zaznamy.csv`, `vynimky.csv`, `udalosti.csv`, `priebeh.csv` – editované appkou (commity cez GitHub API)
-
-## Model
-Predikcia = úroveň s tlmeným trendom (42 dní, vážená regresia) × faktor dňa v týždni (medián 8 týždňov)
-× faktor dňa v mesiaci (výplatné výkyvy) × koeficient udalostí. Dni s výnimkou sú vylúčené z tréningu.
-Zvozy: zvoz(D) = Σ vzniky(D−k, hodina) × expedičný podiel hodiny × podiel D+k, k = 0…3.
+SK, CS, EN, UA — prepínač v hlavičke. Nové texty sa pridávajú do `lib/preklady.js`.

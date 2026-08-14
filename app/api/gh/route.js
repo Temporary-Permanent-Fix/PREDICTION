@@ -15,9 +15,9 @@ function ghHint(status) {
 // zapisovateľné: prevádzkové záznamy + baseline dáta z importu Excelu
 const ALLOWED = new Set([
   "pobocky.csv", "manhours.csv",
-  "zaznamy.csv", "vynimky.csv", "udalosti.csv", "priebeh.csv", "kpi.csv", "backlog.csv",
-  "vzniky_hodinove.csv", "distribucia_hodinove.csv", "baseline_hodinove.csv", "prijem_hodinove.csv",
-  "kvalita_denne.csv", "zvoz_matica.json", "procesy_pomery.json", "kvalita_hodiny.json", "kvalita_hodinove.csv", "emaily.csv", "prahy.csv", "zmeny.csv", "manazeri.csv", "upozornenia.csv",
+  "zaznamy.csv", "vynimky.csv", "udalosti.csv", "kpi.csv", "backlog.csv",
+  "vzniky_hodinove.csv", "baseline_hodinove.csv", "prijem_hodinove.csv",
+  "kvalita_denne.csv", "zvoz_matica.json", "procesy_pomery.json", "kvalita_hodiny.json", "kvalita_hodinove.csv", "emaily.csv", "prahy.csv", "zmeny.csv", "manazeri.csv", "upozornenia.csv", "zlomy.csv", "dfs_in.csv", "dfs_out.csv", "avizo.csv",
 ]);
 
 // súbory, ktorých zápis vyžaduje heslo (env VYKONY_HESLO); bez env je ochrana vypnutá

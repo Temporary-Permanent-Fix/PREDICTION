@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { parseCSV, toCSV } from "../lib/csv";
 import {
   TYPY_VYNIMIEK, TYPY_UDALOSTI, buildDaily, mergedHourly, fitModel, predictDay,
-  expectedFor, hourlyProfile, eventMult, intraday, cumProfile, predictZvoz,
-  addDays, dow, DNI, fmtD, iso, opShift, OP_HOURS, OP_START, dropIncompleteLastOpDay, opIdx, opIdxEnd, backtest, parseVynimky, adjustPartialDays, backlogForDay, predictPrijemZAviza, dfsDenne, dfsRozpad,
+  expectedFor, hourlyProfile, eventMult, intraday,
+  addDays, dow, DNI, fmtD, iso, opShift, OP_HOURS, OP_START, dropIncompleteLastOpDay, opIdx, opIdxEnd, backtest, parseVynimky, adjustPartialDays, predictPrijemZAviza, dfsDenne, dfsRozpad, aplikujZlomy, koefZlomu,
 } from "../lib/model";
 import { t, setLang, JAZYKY } from "../lib/preklady";
 
@@ -152,7 +152,6 @@ export default function Page() {
   const [zaznamy, setZaznamy] = useState([]);
   const [vynimky, setVynimky] = useState([]);
   const [udalosti, setUdalosti] = useState([]);
-  const [priebeh, setPriebeh] = useState([]);
   const [kpi, setKpi] = useState([]);
   const [backlogy, setBacklogy] = useState([]);
   const [emaily, setEmaily] = useState([]);
@@ -163,6 +162,7 @@ export default function Page() {
   const [avizo, setAvizo] = useState([]);
   const [dfsIn, setDfsIn] = useState([]);
   const [dfsOut, setDfsOut] = useState([]);
+  const [zlomy, setZlomy] = useState([]);
   const [pobocky, setPobocky] = useState([]);
   const [pobocka, setPobocka] = useState(null);
   const [manazeri, setManazeri] = useState([]);
@@ -210,11 +210,10 @@ export default function Page() {
         }
         return r.text();
       };
-      const [vz, tr, pr, ds, mtTxt] = await Promise.all([
+      const [vz, tr, pr, mtTxt] = await Promise.all([
         dataText("vzniky_hodinove.csv", true),
         dataText("baseline_hodinove.csv", true),
         dataText("prijem_hodinove.csv"),
-        dataText("distribucia_hodinove.csv"),
         dataText("zvoz_matica.json", true),
       ]);
       const mt = JSON.parse(mtTxt);
@@ -230,7 +229,6 @@ export default function Page() {
         vzniky: dropIncompleteLastOpDay(opShift(parseCSV(vz))),
         triedenie: dropIncompleteLastOpDay(opShift(parseCSV(tr))),
         prijem: dropIncompleteLastOpDay(opShift(parseCSV(pr))),
-        distribucia: dropIncompleteLastOpDay(opShift(parseCSV(ds))),
         matica: mt.matica, zvozProfil: mt.zvozProfil,
         slotMap: mt.slotMap || {}, harmonogram: mt.harmonogram || {}, planStat: mt.plan || null,
         kvalitaDenne: parseCSV(kvD), kvalitaHodinove: parseCSV(kvHod), kvalitaHodiny: kvH,
@@ -249,7 +247,6 @@ export default function Page() {
       loadMut("zaznamy.csv", setZaznamy);
       loadMut("vynimky.csv", setVynimky);
       loadMut("udalosti.csv", setUdalosti);
-      loadMut("priebeh.csv", setPriebeh);
       loadMut("kpi.csv", setKpi);
       loadMut("backlog.csv", setBacklogy);
       loadMut("emaily.csv", setEmaily);
@@ -260,6 +257,7 @@ export default function Page() {
       loadMut("avizo.csv", setAvizo);
       loadMut("dfs_in.csv", setDfsIn);
       loadMut("dfs_out.csv", setDfsOut);
+      loadMut("zlomy.csv", setZlomy);
       loadMut("manazeri.csv", setManazeri);
       fetch("/api/heslo").then((r) => r.json()).then((j) => setChranene(Boolean(j.chranene))).catch(() => {});
       try { const h = sessionStorage.getItem("vykony-heslo"); if (h) setHeslo(h); } catch {}
@@ -306,7 +304,7 @@ export default function Page() {
     if (!staticData) return null;
     const zazSrc = rucneDoplnkove(staticData[src], zaznamy.filter((z) => (z.zdroj || "triedenie") === src));
     const hourly = mergedHourly(staticData[src], zazSrc);
-    const dailyAll = buildDaily(staticData[src], zazSrc);
+    const dailyAll = aplikujZlomy(buildDaily(staticData[src], zazSrc), zlomy);
     const { full, part } = parseVynimky(vynimky);
     const allVynD = [...full, ...part.map((p) => p.datum)];
     const prof = hourlyProfile(hourly, allVynD);
@@ -315,29 +313,29 @@ export default function Page() {
     const btExcl = [...full, ...extraExclude];
     const model = fitModel(dailyAdj, btExcl, udalosti);
     return { hourly, daily: dailyAll, dailyAdj, vynD: allVynD, btExcl, part, model, prof };
-  }, [staticData, zaznamy, vynimky, udalosti, src]);
+  }, [staticData, zaznamy, vynimky, udalosti, src, zlomy]);
 
   // ---- vzniky vždy (pre zvoz), nezávisle od prepínača
   const V = useMemo(() => {
     if (!staticData) return null;
     const zazSrc = rucneDoplnkove(staticData.vzniky, zaznamy.filter((z) => (z.zdroj || "triedenie") === "vzniky"));
-    const daily = buildDaily(staticData.vzniky, zazSrc);
+    const daily = aplikujZlomy(buildDaily(staticData.vzniky, zazSrc), zlomy);
     const vynD = vynimky.map((v) => v.datum);
     const hourly = mergedHourly(staticData.vzniky, zazSrc);
     return { daily, hourly, model: fitModel(daily, vynD, udalosti), prof: hourlyProfile(hourly, vynD) };
-  }, [staticData, zaznamy, vynimky, udalosti]);
+  }, [staticData, zaznamy, vynimky, udalosti, zlomy]);
 
   const TP = useMemo(() => {
     if (!staticData) return null;
     const mk = (key) => {
       const zazS = rucneDoplnkove(staticData[key], zaznamy.filter((z) => (z.zdroj || "triedenie") === key));
-      const daily = buildDaily(staticData[key], zazS);
+      const daily = aplikujZlomy(buildDaily(staticData[key], zazS), zlomy);
       const vynD = vynimky.map((v) => v.datum);
       const hourly = mergedHourly(staticData[key], zazS);
       return { daily, hourly, model: fitModel(daily, vynD, udalosti), prof: hourlyProfile(hourly, vynD) };
     };
-    return { triedenie: mk("triedenie"), prijem: mk("prijem"), distribucia: mk("distribucia") };
-  }, [staticData, zaznamy, vynimky, udalosti]);
+    return { triedenie: mk("triedenie"), prijem: mk("prijem") };
+  }, [staticData, zaznamy, vynimky, udalosti, zlomy]);
 
   const prahy = {
     kvZelena: +(prahyR.find((p) => p.kluc === "kvalita_zelena")?.hodnota) || 99,
@@ -431,7 +429,7 @@ export default function Page() {
           <span>{t("Deň")} <b>06:00–06:00</b></span>
           {naZdroji && (
             <>
-              <span>{t("zdroj")}{" "}<b>{t({ vzniky: "vzniky (zákaznícke)", triedenie: "triedenie (expedícia)", prijem: "príjem (received)", distribucia: "distribúcia (medzisklad)" }[src])}</b></span>
+              <span>{t("zdroj")}{" "}<b>{t({ vzniky: "vzniky (zákaznícke)", triedenie: "triedenie (expedícia)", prijem: "príjem (received)" }[src])}</b></span>
               <span>{t("tréning")}{" "}<b>{model.trainDays} {t("dní")}</b></span>
               <span>{t("posledné dáta")}{" "}<b>{fmtD(model.lastDate)}{model.lastDate.slice(0, 4)}</b></span>
               <span>{t("úroveň")}{" "}<b>{nf.format(model.levelNow)}</b> {t("JBL/deň")}</span>
@@ -482,7 +480,7 @@ export default function Page() {
       {tab === "pred" && <TabPredikcia avizo={avizo} dfsIn={dfsIn} TP={TP} D={D} uda={uda} src={src} kpi={kpi} pomery={staticData.pomery} backlogy={backlogy} />}
       {tab === "vstup" && <TabVstup D={D} uda={uda} src={src} zaznamy={zaznamy} setZaznamy={setZaznamy} vynimky={vynimky} setVynimky={setVynimky} save={save} />}
       {tab === "anom" && <TabAnomalie D={D} uda={uda} src={src} vynimky={vynimky} setVynimky={setVynimky} save={save} />}
-      {tab === "udal" && <TabUdalosti D={V} uda={uda} setUdalosti={setUdalosti} save={save} />}
+      {tab === "udal" && <TabUdalosti D={V} uda={uda} setUdalosti={setUdalosti} save={save} zlomy={zlomy} setZlomy={setZlomy} rawDaily={V.daily} />}
       {tab === "upoz" && <TabUpoz upozornenia={upozornenia} upoz={upoz} setUpoz={setUpoz} backlogy={backlogy} setBacklogy={setBacklogy} save={save} kpi={kpi} pomery={staticData.pomery} />}
       {prazdnaPobocka && (
         <p className="note" style={{ color: "var(--amber)", marginTop: 4 }}>
@@ -490,13 +488,13 @@ export default function Page() {
         </p>
       )}
       {tab === "dfs" && <TabDfs dfsIn={dfsIn} dfsOut={dfsOut} uda={uda} vynimky={vynimky} udalosti={udalosti} pobocka={pobocka} />}
-      {tab === "prehlad" && <TabPrehlad pobocka={pobocka} V={V} TP={TP} staticData={staticData} uda={uda} vynimky={vynimky} backlogy={backlogy} emaily={emaily} show={show} kpi={kpi} prahy={prahy} upozAktivne={upozAktivne} />}
+      {tab === "prehlad" && <TabPrehlad pobocka={pobocka} dfsIn={dfsIn} V={V} TP={TP} staticData={staticData} uda={uda} vynimky={vynimky} backlogy={backlogy} emaily={emaily} show={show} kpi={kpi} prahy={prahy} upozAktivne={upozAktivne} />}
       {tab === "zataz" && <TabZataz manhours={manhours} V={V} TP={TP} staticData={staticData} uda={uda} kpi={kpi} backlogy={backlogy} prahy={prahy} />}
       {tab === "kvalita" && <TabKvalita staticData={staticData} prahy={prahy} />}
       {tab === "zmeny" && <TabZmeny staticData={staticData} zmeny={zmeny} setZmeny={setZmeny} manazeri={manazeri} save={save} prahy={prahy} />}
       {tab === "admin" && <TabVykony kpi={kpi} setKpi={setKpi} save={save} emaily={emaily} setEmaily={setEmaily} prahyR={prahyR} setPrahy={setPrahy} prahy={prahy} chranene={chranene} heslo={heslo} setHeslo={setHeslo} show={show} />}
       {tab === "import" && <TabImport saveRaw={saveRaw} saveRawDo={saveRawDo} show={show} ghOk={ghOk} />}
-      {tab === "model" && <TabModel sources={{ vzniky: { ...V, vynD: vynimky.map((v) => v.datum) }, triedenie: TP.triedenie, prijem: TP.prijem, distribucia: TP.distribucia }} vynD={vynimky.map((v) => v.datum)} uda={uda} />}
+      {tab === "model" && <TabModel sources={{ vzniky: { ...V, vynD: vynimky.map((v) => v.datum) }, triedenie: TP.triedenie, prijem: TP.prijem }} vynD={vynimky.map((v) => v.datum)} uda={uda} />}
 
       {toast && <div className={`toast ${toast.err ? "err" : ""}`}>{toast.msg}</div>}
     </div>
@@ -538,7 +536,6 @@ function TabPredikcia({ D, uda, src, kpi, pomery, backlogy, avizo, TP, dfsIn }) 
   const PROC_MAP = {
     vzniky: [["Pick", pomery?.Pick ?? 1], ["Pack", pomery?.Pack ?? 1], ["Sort", 1]],
     triedenie: [["Pick", pomery?.Pick ?? 1], ["Pack", pomery?.Pack ?? 1], ["Sort", 1]],
-    distribucia: [["Pick", 1], ["Pack", 1]],
     prijem: [["Príjem", 1]],
   };
   const procs = PROC_MAP[src] || [];
@@ -835,7 +832,7 @@ function TabAnomalie({ D, uda, src, vynimky, setVynimky, save }) {
 }
 
 // -------------------------------------------------------- 📅 Udalosti
-function TabUdalosti({ D, uda, setUdalosti, save }) {
+function TabUdalosti({ D, uda, setUdalosti, save, zlomy, setZlomy, rawDaily }) {
   const dk = D.model.defaultKoef;
   const [nazov, setNazov] = useState("");
   const [typ, setTyp] = useState("Alza dni");
@@ -863,6 +860,17 @@ function TabUdalosti({ D, uda, setUdalosti, save }) {
     setOdhad(`Navrhovaný koeficient: ${k.toFixed(2)} (medián pomeru skutočnosť/model za ${rng.length}{" "}{t("dní)")}`);
   };
 
+  const ZCOLS = ["datum", "popis", "koef"];
+  const [zlDatum, setZlDatum] = useState(today());
+  const [zlPopis, setZlPopis] = useState("");
+  const navrhKoef = useMemo(() => (rawDaily ? koefZlomu(rawDaily, zlDatum) : null), [rawDaily, zlDatum]);
+  const ulozZlom = () => {
+    const rest = (zlomy || []).filter((z) => z.datum !== zlDatum);
+    save("zlomy.csv", [...rest, { datum: zlDatum, popis: zlPopis, koef: "" }], ZCOLS, `data: štrukturálny zlom ${zlDatum}`, setZlomy);
+    setZlPopis("");
+  };
+  const zmazZlom = (d) => save("zlomy.csv", (zlomy || []).filter((z) => z.datum !== d), ZCOLS, `data: odstránený zlom ${d}`, setZlomy);
+
   return (
     <>
       <p className="note">{t("Koeficient násobí predikciu v danom rozsahu (1.05 = +5 %). Historické udalosti sa zároveň odfiltrujú zo sezónnosti modelu. Koeficient sa predvyplní z historických dát podľa typu – môžeš ho upraviť.")}</p>
@@ -875,6 +883,45 @@ function TabUdalosti({ D, uda, setUdalosti, save }) {
         <button className="btn" disabled={!nazov.trim()} onClick={uloz}><Ico n="save" />{t("Uložiť udalosť")}</button>
       </div>
       {typ === "Black Friday" && <p className="note">{t("Koeficient 1.36 vypočítaný z vznikov počas BF víkendu 2025 (27.11.–1.12.) oproti okolitým týždňom.")}</p>}
+
+      <div className="section">
+        <h3>{t("Štrukturálne zlomy")}</h3>
+        <p className="note">
+          {t("Trvalá zmena úrovne – prevzatie smeru z inej pobočky, nová linka, presun objemu. Staršie dni sa prepočítajú koeficientom, takže sezónnosť zostane použiteľná a úroveň zodpovedá súčasnému stavu. Na rozdiel od udalosti sa neskončí, platí ďalej.")}
+        </p>
+        <div className="frm">
+          <div className="fld"><label>{t("Dátum zmeny")}</label>
+            <input type="date" value={zlDatum} onChange={(e) => setZlDatum(e.target.value)} /></div>
+          <div className="fld"><label>{t("Popis")}</label>
+            <input value={zlPopis} placeholder={t("napr. prevzatý smer z CZLC4")} onChange={(e) => setZlPopis(e.target.value)} /></div>
+          <div className="fld"><label>{t("Vypočítaný koeficient")}</label>
+            <input value={navrhKoef ? "×" + navrhKoef.toFixed(3) : t("málo dát")} disabled /></div>
+          <button className="btn" disabled={!navrhKoef} onClick={ulozZlom}><Ico n="save" />{t("Uložiť zlom")}</button>
+        </div>
+        {navrhKoef && (
+          <p className="note">
+            {t("Koeficient sa počíta z porovnania rovnakých dní v týždni pred a po zmene – prepočítava sa priebežne, takže sa spresní s pribúdajúcimi dátami.")}
+            {" "}{t("Aktuálne")}: {((navrhKoef - 1) * 100).toFixed(1)} %.
+          </p>
+        )}
+        {(zlomy || []).length > 0 && (
+          <table className="t" style={{ maxWidth: 620, marginTop: 10 }}>
+            <thead><tr><th>{t("Dátum")}</th><th>{t("Popis")}</th><th style={{ textAlign: "right" }}>{t("Koeficient")}</th><th /></tr></thead>
+            <tbody>{[...zlomy].sort((a, b) => (a.datum < b.datum ? 1 : -1)).map((z) => {
+              const k = +z.koef > 0 ? +z.koef : (rawDaily ? koefZlomu(rawDaily, z.datum) : null);
+              return (
+                <tr key={z.datum}>
+                  <td>{fmtD(z.datum)}{z.datum.slice(0, 4)}</td>
+                  <td style={{ fontFamily: "var(--sans)" }}>{z.popis}</td>
+                  <td style={{ textAlign: "right" }} className={k > 1 ? "accent" : k < 1 ? "warn" : ""}>
+                    {k ? `×${k.toFixed(3)} (${k >= 1 ? "+" : ""}${((k - 1) * 100).toFixed(1)} %)` : "–"}</td>
+                  <td><button className="btn ghost" onClick={() => zmazZlom(z.datum)}><Ico n="trash" /></button></td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        )}
+      </div>
 
       {uda.length > 0 && (
         <div className="section">
@@ -908,7 +955,7 @@ function TabUdalosti({ D, uda, setUdalosti, save }) {
 }
 
 // ------------------------------------------------------------ Prehľad (denný report)
-function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, kpi, prahy, upozAktivne = [], pobocka }) {
+function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, kpi, prahy, upozAktivne = [], pobocka, dfsIn }) {
   const [vybrane, setVybrane] = useState([]);
   const box = useRef(null);
 
@@ -918,7 +965,13 @@ function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, k
   const nf1p = (x) => (x >= 0 ? "▲ +" : "▼ ") + nf1.format(Math.abs(x)) + " %";
 
   const vDen = dennaHod(V.daily, den), vTyz = dennaHod(V.daily, tyzden);
-  const tDen = dennaHod(TP.triedenie.daily, den), dDen = dennaHod(TP.distribucia.daily, den);
+  const tDen = dennaHod(TP.triedenie.daily, den);
+  // distribúcia sa sleduje cez DFS (toky medzi pobočkami)
+  const dDen = useMemo(() => {
+    const m = new Map();
+    for (const r of dfsIn || []) m.set(r.datum, (m.get(r.datum) || 0) + (+r.joblines || 0));
+    return m.get(den) ?? null;
+  }, [dfsIn, den]);
   const ocak = expectedFor(den, V.model, uda);
   const presnost = vDen != null ? (vDen / ocak - 1) * 100 : null;
 
@@ -1045,7 +1098,7 @@ function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, k
           <Card lbl={t("Objem (vzniky)")} val={nf.format(vDen)} cls="accent"
             sub={vTyz ? `${nf1p((vDen / vTyz - 1) * 100)} ${t("vs. minulý týždeň")}` : t("bez porovnania")} />
           <Card lbl={t("Expedícia (triedenie)")} val={tDen != null ? nf.format(tDen) : "–"}
-            sub={tDen != null ? (dDen != null ? `${t("distribúcia")} ${nf.format(dDen)}` : "") : t("dáta za tento deň zatiaľ nie sú")} />
+            sub={tDen != null ? (dDen != null ? `${t("distribúcia k nám")} ${nf.format(dDen)}` : "") : t("dáta za tento deň zatiaľ nie sú")} />
           <Card lbl={t("Presnosť predikcie")} val={presnost != null ? nf1p(presnost) : "–"}
             cls={presnost == null ? "" : Math.abs(presnost) <= 8 ? "accent" : Math.abs(presnost) <= 15 ? "warn" : "bad"}
             sub={`${t("model čakal")} ${nf.format(ocak)}`} />
@@ -2065,7 +2118,6 @@ function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
         await saveRaw("zaznamy.csv", "datum,hodina,joblines,poznamka,zdroj,anomalia\n", "data: vyčistenie záznamov pred importom");
         await saveRaw("vynimky.csv", "datum,typ,popis,hodiny\n", "data: vyčistenie výnimiek pred importom");
         await saveRaw("backlog.csv", "z_datum,na_datum,objem,zdroj,poznamka\n", "data: vyčistenie backlogu pred importom");
-        await saveRaw("priebeh.csv", "datum,hodina,vznik,pick,eod\n", "data: vyčistenie snímok pred importom");
       }
       for (const v of ok) {
         for (const [nazov, obsah] of Object.entries(v.subory)) {
@@ -2133,7 +2185,7 @@ function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
             <>
               <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 12, fontSize: 13, color: zmazat ? "var(--amber)" : "var(--muted)", cursor: "pointer" }}>
                 <input type="checkbox" checked={zmazat} onChange={(e) => setZmazat(e.target.checked)} />
-                {t("Pred nahratím zmazať ručne zadané dáta (záznamy, výnimky, backlog, snímky)")}
+                {t("Pred nahratím zmazať ručne zadané dáta (záznamy, výnimky, backlog)")}
               </label>
               {zmazat && <p className="note" style={{ color: "var(--amber)" }}>
                 {t("Nastavenia (výkony, prahy, príjemcovia, kalendár zmien, udalosti) zostanú zachované. Zmazané dáta sa nedajú vrátiť.")}
