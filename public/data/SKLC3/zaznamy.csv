@@ -1,1 +1,6 @@
-datum,hodina,joblines,poznamka,zdroj
+datum,hodina,joblines,poznamka,zdroj,anomalia
+2026-08-15,6,6000,,triedenie,
+2026-08-15,7,8000,,triedenie,
+2026-08-15,8,9000,,triedenie,
+2026-08-15,9,7000,,triedenie,
+2026-08-15,10,5000,,triedenie,
