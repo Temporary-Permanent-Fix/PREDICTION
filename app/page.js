@@ -2236,9 +2236,15 @@ function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
                 <td style={{ fontFamily: "var(--sans)" }}>{v.nazov}</td>
                 <td>{v.chyba ? <span className="pill red">{t("chyba")}</span> : <span className="pill green">{v.typ}</span>}</td>
                 <td style={{ fontFamily: "var(--sans)" }} className={v.chyba ? "bad" : ""}>{v.chyba || v.suhrn}</td>
-                <td style={{ fontFamily: "var(--sans)" }}>{v.subory ? Object.keys(v.subory).map((n) => (
-                  <div key={n}>{n} <span className="note" style={{ margin: 0 }}>· {POPIS_SUBOROV[n] || ""}</span></div>
-                )) : "–"}</td>
+                <td style={{ fontFamily: "var(--sans)" }}>{v.subory ? Object.keys(v.subory).map((n) => {
+                  const [pob, file] = n.includes("::") ? n.split("::") : [null, n];
+                  return (
+                    <div key={n}>
+                      {pob && <span className="pill green" style={{ marginRight: 5 }}>{pob}</span>}
+                      {file}
+                    </div>
+                  );
+                }) : "–"}</td>
               </tr>
             ))}</tbody>
           </table>
