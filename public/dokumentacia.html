@@ -280,7 +280,8 @@ a{color:var(--green2)}
 <tr><td>Kalendár zmien</td><td>Excel rozpis</td><td>zlúčené bunky s menami nad dátumami</td><td>rozpis operation managerov</td></tr>
 </tbody></table>
 <p>V Power BI sa exportuje cez <strong>Explore → export do Excelu</strong>. Pred exportom skontroluj rozsah dátumu — appka spracuje len to, čo je v súbore.</p>
-<p>Import prepisuje súbory <strong>celé</strong>: čo v exporte nie je, zostáva pôvodné. Zaškrtávacie pole umožňuje pred nahratím vyčistiť ručne zadané dáta (záznamy, výnimky, backlog); nastavenia zostávajú.</p>
+<p><strong>Import dáta zlučuje, nie prepisuje.</strong> Dni, ktoré sú v novom exporte, sa nahradia celé (vrátane prípadných opráv hodín), staršia história zostáva zachovaná. Nemusíš teda exportovať celé obdobie — stačí posledné dni.</p>
+<p>Ak chceš históriu naozaj zahodiť (napr. pri zmene metodiky exportu), zaškrtni <em>Nahradiť celé súbory namiesto zlúčenia</em>. Druhé zaškrtávacie pole umožňuje pred nahratím vyčistiť ručne zadané dáta (záznamy, výnimky, backlog); nastavenia zostávajú.</p>
 
 <h2 id="16-denny-report-do-teams">16. Denný report do Teams</h2>
 <p>Cron pošle kartu s číslami za predchádzajúci deň o <strong>6:00</strong> miestneho času (letný aj zimný čas rieši appka sama). Ak dáta za predchádzajúci deň ešte nie sú, report sa preskočí a skúsi to znova o hodinu, až do 9:00.</p>
