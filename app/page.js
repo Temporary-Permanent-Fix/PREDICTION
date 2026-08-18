@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { parseCSV, toCSV } from "../lib/csv";
+import { parseCSV, toCSV, zlucPodlaDna } from "../lib/csv";
 import {
   TYPY_VYNIMIEK, TYPY_UDALOSTI, buildDaily, mergedHourly, fitModel, predictDay,
   expectedFor, hourlyProfile, eventMult, intraday,
@@ -281,6 +281,19 @@ export default function Page() {
     } catch { show(t("Uložené len lokálne (bez pripojenia)."), true); }
   };
 
+  // existujúci obsah súboru danej pobočky (na zlúčenie pri importe)
+  const nacitajRaw = async (pob, file) => {
+    try {
+      const g = await fetch(`/api/gh?file=${pob}/${file}`, { cache: "no-store" });
+      if (g.ok) return (await g.json()).content;
+    } catch {}
+    try {
+      const r = await fetch(`/data/${pob}/${file}`);
+      if (r.ok) return await r.text();
+    } catch {}
+    return "";
+  };
+
   const saveRawDo = async (pob, file, content, message) => {
     const r = await fetch("/api/gh", {
       method: "POST",
@@ -499,9 +512,9 @@ export default function Page() {
       {tab === "prehlad" && <TabPrehlad pobocka={pobocka} dfsIn={dfsIn} V={V} TP={TP} staticData={staticData} uda={uda} vynimky={vynimky} backlogy={backlogy} emaily={emaily} show={show} kpi={kpi} prahy={prahy} upozAktivne={upozAktivne} />}
       {tab === "zataz" && <TabZataz manhours={manhours} V={V} TP={TP} staticData={staticData} uda={uda} kpi={kpi} backlogy={backlogy} prahy={prahy} />}
       {tab === "kvalita" && <TabKvalita staticData={staticData} prahy={prahy} />}
-      {tab === "zmeny" && <TabZmeny staticData={staticData} zmeny={zmeny} setZmeny={setZmeny} manazeri={manazeri} save={save} prahy={prahy} />}
+      {tab === "zmeny" && <TabZmeny pobocka={pobocka} staticData={staticData} zmeny={zmeny} setZmeny={setZmeny} manazeri={manazeri} save={save} prahy={prahy} />}
       {tab === "admin" && <TabVykony manhours={manhours} kpi={kpi} setKpi={setKpi} save={save} emaily={emaily} setEmaily={setEmaily} prahyR={prahyR} setPrahy={setPrahy} prahy={prahy} chranene={chranene} heslo={heslo} setHeslo={setHeslo} show={show} />}
-      {tab === "import" && <TabImport saveRaw={saveRaw} saveRawDo={saveRawDo} show={show} ghOk={ghOk} />}
+      {tab === "import" && <TabImport saveRaw={saveRaw} saveRawDo={saveRawDo} nacitajRaw={nacitajRaw} pobocka={pobocka} show={show} ghOk={ghOk} />}
       {tab === "model" && <TabModel sources={{ vzniky: { ...V, vynD: vynimky.map((v) => v.datum) }, triedenie: TP.triedenie, prijem: TP.prijem }} vynD={vynimky.map((v) => v.datum)} uda={uda} />}
 
       {toast && <div className={`toast ${toast.err ? "err" : ""}`}>{toast.msg}</div>}
@@ -1969,7 +1982,7 @@ function TabUpoz({ upozornenia, upoz, setUpoz, backlogy, setBacklogy, save, kpi,
 // Denná zmena = prevádzkové hodiny 06:00–17:59, nočná 18:00–05:59.
 
 
-function TabZmeny({ staticData, zmeny, setZmeny, manazeri, save, prahy }) {
+function TabZmeny({ staticData, zmeny, setZmeny, manazeri, save, prahy, pobocka }) {
   const kvH = staticData.kvalitaHodinove || [];
   const ZCOLS = ["datum", "denna", "nocna"];
   const ZMENY = useMemo(() => [...new Set(zmeny.flatMap((z) => [z.denna, z.nocna]).filter(Boolean))].sort(), [zmeny]);
@@ -2028,7 +2041,12 @@ function TabZmeny({ staticData, zmeny, setZmeny, manazeri, save, prahy }) {
     return c > 0 ? (1 - z / c) * 100 : null;
   };
 
-  if (!kvH.length) return <p className="note">{t("Chýba súbor kvalita_hodinove.csv – nahraj QUALITY export v záložke Dáta.")}</p>;
+  if (!kvH.length) return (
+    <p className="note" style={{ color: "var(--amber)" }}>
+      {t("Chýba hodinová kvalita pre pobočku")} <b>{pobocka}</b> ({t("súbor")} <code>public/data/{pobocka}/kvalita_hodinove.csv</code>).
+      {" "}{t("Nahraj QUALITY export v záložke Dáta a potvrď uloženie.")}
+    </p>
+  );
 
   return (
     <>
@@ -2112,9 +2130,10 @@ function TabZmeny({ staticData, zmeny, setZmeny, manazeri, save, prahy }) {
 
 const POVOLENE_POBOCKY = ["SKLC3", "CZLC4", "LCU"];
 
-function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
+function TabImport({ saveRaw, saveRawDo, nacitajRaw, pobocka, show, ghOk }) {
   const [vysledky, setVysledky] = useState([]);
   const [zmazat, setZmazat] = useState(false);
+  const [prepisat, setPrepisat] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ukladam, setUkladam] = useState(false);
 
@@ -2167,13 +2186,17 @@ function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
       }
       for (const v of ok) {
         for (const [nazov, obsah] of Object.entries(v.subory)) {
-          // kľúč "POBOCKA::subor.csv" zapíše do inej pobočky (avíza sú spoločný export)
-          if (nazov.includes("::")) {
-            const [pob, file] = nazov.split("::");
-            await saveRawDo(pob, file, obsah, `data: import ${v.typ} (${v.nazov})`);
-          } else {
-            await saveRaw(nazov, obsah, `data: import ${v.typ} (${v.nazov})`);
+          // kľúč "POBOCKA::subor.csv" zapíše do inej pobočky (avíza a DFS sú spoločné exporty)
+          const [pob, file] = nazov.includes("::") ? nazov.split("::") : [pobocka, nazov];
+          // predvolene sa dáta zlučujú: nové dni prepíšu staré, zvyšok histórie zostáva
+          let vysledny = obsah;
+          if (!prepisat && file.endsWith(".csv")) {
+            const stary = await nacitajRaw(pob, file);
+            vysledny = zlucPodlaDna(stary, obsah);
           }
+          const sprava = `data: import ${v.typ} (${v.nazov})${prepisat ? " – prepis" : ""}`;
+          if (nazov.includes("::")) await saveRawDo(pob, file, vysledny, sprava);
+          else await saveRaw(file, vysledny, sprava);
         }
       }
       show(`Uložených ${spolu} súborov – načítavam nové dáta…`);
@@ -2236,16 +2259,29 @@ function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
                 <td style={{ fontFamily: "var(--sans)" }}>{v.nazov}</td>
                 <td>{v.chyba ? <span className="pill red">{t("chyba")}</span> : <span className="pill green">{v.typ}</span>}</td>
                 <td style={{ fontFamily: "var(--sans)" }} className={v.chyba ? "bad" : ""}>{v.chyba || v.suhrn}</td>
-                <td style={{ fontFamily: "var(--sans)" }}>{v.subory ? Object.keys(v.subory).map((n) => (
-                  <div key={n}>{n} <span className="note" style={{ margin: 0 }}>· {POPIS_SUBOROV[n] || ""}</span></div>
-                )) : "–"}</td>
+                <td style={{ fontFamily: "var(--sans)" }}>{v.subory ? Object.keys(v.subory).map((n) => {
+                  const [pob, file] = n.includes("::") ? n.split("::") : [null, n];
+                  return (
+                    <div key={n}>
+                      {pob && <span className="pill green" style={{ marginRight: 5 }}>{pob}</span>}
+                      {file}
+                    </div>
+                  );
+                }) : "–"}</td>
               </tr>
             ))}</tbody>
           </table>
 
           {ok.length > 0 && (
             <>
-              <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 12, fontSize: 13, color: zmazat ? "var(--amber)" : "var(--muted)", cursor: "pointer" }}>
+              <p className="note" style={{ marginTop: 12, marginBottom: 4 }}>
+                {t("Dáta sa zlučujú s doterajšími: dni, ktoré sú v novom exporte, sa prepíšu, staršia história zostáva. Nemusíš teda exportovať celé obdobie.")}
+              </p>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 13, color: prepisat ? "var(--amber)" : "var(--muted)", cursor: "pointer" }}>
+                <input type="checkbox" checked={prepisat} onChange={(e) => setPrepisat(e.target.checked)} />
+                {t("Nahradiť celé súbory namiesto zlúčenia (zahodí staršiu históriu)")}
+              </label>
+              <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 6, fontSize: 13, color: zmazat ? "var(--amber)" : "var(--muted)", cursor: "pointer" }}>
                 <input type="checkbox" checked={zmazat} onChange={(e) => setZmazat(e.target.checked)} />
                 {t("Pred nahratím zmazať ručne zadané dáta (záznamy, výnimky, backlog)")}
               </label>
@@ -2261,8 +2297,8 @@ function TabImport({ saveRaw, saveRawDo, show, ghOk }) {
               </div>
               <p className="note">
                 {ghOk === false
-                  ? "GitHub zápis nie je nakonfigurovaný (env GH_TOKEN / GH_REPO) – bez neho sa dáta uložiť nedajú."
-                  : "Uloží dátové súbory do repozitára a hneď ich načíta. Redeploy netreba – appka číta tieto súbory priamo z GitHubu."}
+                  ? t("GitHub zápis nie je nakonfigurovaný (env GH_TOKEN / GH_REPO) – bez neho sa dáta uložiť nedajú.")
+                  : t("Uloží dátové súbory do repozitára a hneď ich načíta. Redeploy netreba – appka číta tieto súbory priamo z GitHubu.")}
               </p>
             </>
           )}
