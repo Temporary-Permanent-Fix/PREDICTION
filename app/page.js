@@ -624,6 +624,11 @@ function TabPredikcia({ D, uda, src, kpi, pomery, backlogy, avizo, TP, dfsIn }) 
 
       <div className="section">
         <h3>{t("Hodinová predikcia")} · {fmtD(datum)}</h3>
+        {D.prof?.rovnomerny && (
+          <p className="note" style={{ color: "var(--amber)" }}>
+            {t("Hodinový profil sa nedá spočítať – pre tento zdroj chýbajú hodinové dáta, objem je preto rozdelený rovnomerne. Nahraj príslušný export v záložke Dáta.")}
+          </p>
+        )}
         <div className="chartbox"><Bars data={OP_HOURS.map((h) => ({ x: String(h).padStart(2, "0"), y: pred * p[h] }))} /></div>
         <p className="note">{t("Prevádzkový deň")} {String(OP_START).padStart(2, "0")}:00 – {String(OP_START).padStart(2, "0")}:00 {t("nasledujúceho dňa.")}</p>
       </div>
@@ -1198,7 +1203,7 @@ function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, k
         </div>
       </div>
 
-      <div className="section">
+      <div className="section noprint">
         <h3>{t("Export a rozposlanie")}</h3>
         <div className="frm">
           <button className="btn" onClick={stiahni}><Ico n="obrazok" />{t("Stiahnuť ako obrázok")}</button>
