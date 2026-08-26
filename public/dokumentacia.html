@@ -267,7 +267,9 @@ a{color:var(--green2)}
 <p>Chránená sekcia — heslo si vypýta hneď po kliknutí, platí do zatvorenia karty prehliadača. Obsahuje plošné výkony, úpravu výkonu pre konkrétny deň, prahy zobrazenia, citlivosť upozornení a príjemcov reportu.</p>
 <hr />
 <h2 id="15-import-dat">15. Import dát — návod</h2>
-<p><strong>Na názve súboru nezáleží.</strong> Appka rozpoznáva typ exportu <strong>podľa obsahu</strong> — podľa stĺpcov a filtrov v hlavičke. Súbory si teda môžeš pomenovať ľubovoľne, dôležité je, aby si ich exportoval zo správneho reportu a so správnymi filtrami. Naraz sa dá vybrať viac súborov aj zošit s viacerými hárkami.</p>
+<p><strong>Na názve súboru nezáleží.</strong> Appka rozpoznáva typ exportu <strong>podľa štruktúry</strong> — podľa pozície hlavičky, počtu stĺpcov a typu hodnôt na konkrétnych pozíciách. Súbory si teda môžeš pomenovať ľubovoľne, dôležité je, aby si ich exportovala zo správneho reportu a so správnymi filtrami. Naraz sa dá vybrať viac súborov aj zošit s viacerými hárkami.</p>
+<p><strong>Prečo podľa pozície a nie podľa názvov stĺpcov:</strong> názvy sú v ERP lokalizované a menia sa s jazykovým nastavením používateľa, kým poradie stĺpcov v exporte z rovnakého pohľadu zostáva rovnaké. Rovnako sa odvodzuje aj smer distribúcie (In/Out) — z toho, na ktorej strane sú kódy pobočiek, nie z textu filtra.</p>
+<p>Ak by sa niekedy zmenila štruktúra samotného pohľadu, stačí upraviť konštanty <code>STLPCE</code> na začiatku súboru <code>lib/importuj.js</code>.</p>
 <table>
 <thead><tr><th>Export</th><th>Odkiaľ</th><th>Ako</th><th>Čo z neho vznikne</th></tr></thead>
 <tbody>

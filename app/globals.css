@@ -159,12 +159,26 @@ table.t tr:hover td { background: #17171799; }
 }
 
 @media print {
-  .srcswitch, .tabs, .langsw, .toast, .btn, .seg { display: none !important; }
-  body, html { background: #fff; }
-  .shell { max-width: none; padding: 0; }
-  .masthead { border-color: #ccc; background: #fff; }
-  .masthead::before { display: none; }
-  .card, .chartbox { break-inside: avoid; border-color: #ddd; }
-  * { color: #111 !important; }
-  .accent { color: #0a7a33 !important; } .warn { color: #96690f !important; } .bad { color: #b02a24 !important; }
+  @page { size: A4 landscape; margin: 5mm; }
+  html, body { background: var(--bg) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .srcswitch, .tabs, .langsw, .toast, .btn, .seg, .pobsw, .nastroje, .navrow, .statusline { display: none !important; }
+  .masthead .note, .tagline, .noprint { display: none !important; }
+  .shell { max-width: none; padding: 6mm 6mm 0; }
+  /* karty a tabuľky nech zaplnia stranu rovnomerne */
+  .card, .chartbox { padding: 7px 10px !important; }
+  .masthead { padding: 8px 12px 6px; margin-bottom: 8px; }
+  .masthead h1 { font-size: 19px; padding-bottom: 5px; }
+  .masthead h1::after { height: 3px; width: 44px; }
+  .eyebrow { font-size: 9px; }
+  .card, .chartbox { break-inside: avoid; padding: 6px 9px !important; }
+  .grid { gap: 6px !important; }
+  .val { font-size: 16px !important; }
+  .lbl, .sub, .note { font-size: 9px !important; }
+  .section { margin-top: 6px !important; }
+  .section h3 { font-size: 11px !important; margin: 0 0 5px !important; }
+  .legend { font-size: 8px !important; }
+  table.t { font-size: 9px !important; }
+  table.t th, table.t td { padding: 3px 6px !important; }
+  .chartbox svg { max-height: 158px; width: 100% !important; }
+  h2, h3 { page-break-after: avoid; }
 }

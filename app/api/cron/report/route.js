@@ -131,6 +131,23 @@ export async function GET(req) {
   </div>`;
 
   const nadpis = `Prehľad ${POB} · ${fmtD(den)}${den.slice(0, 4)} (${DNI[dow(den)]})`;
+
+  // súhrn v čitateľnom texte (Teams karta aj preposlanie e-mailom cez Power Automate)
+  const textVerzia = [
+    nadpis,
+    "prevádzkový deň 06:00–06:00",
+    "",
+    `Objem (vzniky): ${nf(vDen)}${vTyz ? ` (${pct((vDen / vTyz - 1) * 100)} vs. minulý týždeň)` : ""}`,
+    `Expedícia (triedenie): ${tDen != null ? nf(tDen) : "dáta zatiaľ nie sú"}`,
+    `Distribúcia k nám: ${nf(dDen)}`,
+    `Presnosť predikcie: ${vDen != null ? pct((vDen / ocak - 1) * 100) : "–"} (model čakal ${nf(ocak)})`,
+    `Otvorený backlog: ${nf(bkObjem)} JBL`,
+    "",
+    `Kvalita ${fmtD(kvDen)}: ${kvality.map(([nz, v]) => `${nz} ${v != null ? v.toFixed(1) + " %" : "–"}`).join(" · ")}`,
+    "",
+    `Výhľad na 7 dní: ${vyhlad.join(" · ")}`,
+    process.env.APP_URL ? `\nCelý prehľad: ${process.env.APP_URL}` : "",
+  ].filter((x) => x !== null).join("\n");
   const vysledok = { den, teams: null };
 
   // --- Microsoft Teams (Adaptive Card cez webhook) ---
@@ -183,6 +200,9 @@ export async function GET(req) {
               const [den7, hodnota] = v.split(": ");
               return { title: den7, value: hodnota };
             }) },
+            // čitateľná textová verzia – Power Automate ju vie prebrať do tela e-mailu
+            { type: "TextBlock", text: textVerzia, wrap: true, isSubtle: true, size: "Small",
+              spacing: "Medium", separator: true },
           ],
           actions: process.env.APP_URL
             ? [{ type: "Action.OpenUrl", title: "Otvoriť prehľad v appke", url: process.env.APP_URL }]

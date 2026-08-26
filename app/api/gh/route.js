@@ -9,6 +9,8 @@ function ghHint(status) {
   if (status === 401) return "GitHub 401 – token je neplatný alebo expirovaný.";
   if (status === 403) return "GitHub 403 – token nemá právo Contents: write, alebo čaká na schválenie organizáciou.";
   if (status === 404) return "GitHub 404 – skontroluj GH_REPO (org/repo) a GH_DIR; token možno repo nevidí (zlý Resource owner).";
+  if (status === 409) return "GitHub 409 – súbor medzitým zmenil niekto iný, skús to znova.";
+  if (status === 422) return "GitHub 422 – súbor sa nepodarilo aktualizovať (neplatný SHA). Skús to znova; ak sa opakuje, over GH_BRANCH.";
   return `GitHub ${status}`;
 }
 
@@ -76,11 +78,27 @@ export async function POST(req) {
   const api = `https://api.github.com/repos/${repo}/contents/${dir}/${file}`;
   const headers = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" };
 
-  let sha;
-  const cur = await fetch(`${api}?ref=${branch}`, { headers, cache: "no-store" });
-  if (cur.ok) sha = (await cur.json()).sha;
+  // SHA existujúceho súboru. Priame čítanie zlyhá pri súboroch nad 1 MB
+  // (Contents API vtedy obsah nevráti), preto je záložne výpis priečinka –
+  // ten SHA obsahuje bez ohľadu na veľkosť.
+  const zisiSha = async () => {
+    const cur = await fetch(`${api}?ref=${branch}`, { headers, cache: "no-store" });
+    if (cur.ok) {
+      const j = await cur.json();
+      if (j && j.sha) return j.sha;
+    }
+    const casti = String(file).split("/");
+    const priecinok = casti.length > 1 ? `${dir}/${casti.slice(0, -1).join("/")}` : dir;
+    const nazov = casti[casti.length - 1];
+    const zoz = await fetch(`https://api.github.com/repos/${repo}/contents/${priecinok}?ref=${branch}`,
+      { headers, cache: "no-store" });
+    if (!zoz.ok) return undefined;
+    const polozky = await zoz.json();
+    if (!Array.isArray(polozky)) return undefined;
+    return polozky.find((p) => p.name === nazov)?.sha;
+  };
 
-  const r = await fetch(api, {
+  const zapis = async (sha) => fetch(api, {
     method: "PUT",
     headers,
     body: JSON.stringify({
@@ -90,6 +108,17 @@ export async function POST(req) {
       ...(sha ? { sha } : {}),
     }),
   });
-  if (!r.ok) return Response.json({ error: "Zápis zlyhal: " + ghHint(r.status) }, { status: 502 });
+
+  let sha = await zisiSha();
+  let r = await zapis(sha);
+  // 409/422 = zastaraný alebo chýbajúci SHA (súbeh zápisov) – raz zopakuj s čerstvým
+  if (!r.ok && (r.status === 409 || r.status === 422)) {
+    const cerstve = await zisiSha();
+    if (cerstve && cerstve !== sha) r = await zapis(cerstve);
+  }
+  if (!r.ok) {
+    const detail = await r.text().catch(() => "");
+    return Response.json({ error: "Zápis zlyhal: " + ghHint(r.status), detail: detail.slice(0, 200) }, { status: 502 });
+  }
   return Response.json({ ok: true });
 }
