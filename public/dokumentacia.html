@@ -268,7 +268,8 @@ a{color:var(--green2)}
 <hr />
 <h2 id="15-import-dat">15. Import dát — návod</h2>
 <p><strong>Na názve súboru nezáleží.</strong> Appka rozpoznáva typ exportu <strong>podľa štruktúry</strong> — podľa pozície hlavičky, počtu stĺpcov a typu hodnôt na konkrétnych pozíciách. Súbory si teda môžeš pomenovať ľubovoľne, dôležité je, aby si ich exportovala zo správneho reportu a so správnymi filtrami. Naraz sa dá vybrať viac súborov aj zošit s viacerými hárkami.</p>
-<p><strong>Prečo podľa pozície a nie podľa názvov stĺpcov:</strong> názvy sú v ERP lokalizované a menia sa s jazykovým nastavením používateľa, kým poradie stĺpcov v exporte z rovnakého pohľadu zostáva rovnaké. Rovnako sa odvodzuje aj smer distribúcie (In/Out) — z toho, na ktorej strane sú kódy pobočiek, nie z textu filtra.</p>
+<p><strong>Prečo nie podľa názvov stĺpcov:</strong> názvy sú v ERP lokalizované a menia sa s jazykovým nastavením používateľa. Appka si preto <strong>stĺpce hľadá podľa obsahu</strong> — stĺpec procesu podľa hodnôt typu „Kvalita | 1. Pick", hodinu podľa celých čísel 0–23, dátum podľa typu bunky, objem podľa najväčšej číselnej rady. Poradie stĺpcov sa tak môže líšiť a import bude fungovať.</p>
+<p>Rovnako sa odvodzuje aj smer distribúcie (In/Out) — z toho, na ktorej strane sú kódy pobočiek, nie z textu filtra. Indexy v konštante <code>STLPCE</code> (<code>lib/importuj.js</code>) slúžia už len ako záloha, keby hľadanie zlyhalo.</p>
 <p>Ak by sa niekedy zmenila štruktúra samotného pohľadu, stačí upraviť konštanty <code>STLPCE</code> na začiatku súboru <code>lib/importuj.js</code>.</p>
 <table>
 <thead><tr><th>Export</th><th>Odkiaľ</th><th>Ako</th><th>Čo z neho vznikne</th></tr></thead>
@@ -405,6 +406,22 @@ a{color:var(--green2)}
 </tbody>
 </table>
 <hr />
+<h2 id="20-dalsie-zdroje">20. Ďalšie zdroje dát</h2>
+<h3>BigQuery export</h3>
+<p>Jeden zdroj namiesto OLAP a VOLUMES: hodinové vzniky, príjem a väzba vznik → reálny odchod, pre všetky pobočky naraz. Import ho rozdelí podľa pobočiek a vygeneruje <code>vzniky_hodinove.csv</code>, <code>prijem_hodinove.csv</code> a <code>typy_zasielok.csv</code>.</p>
+<p>Overené proti doterajším dátam: korelácia denných objemov <strong>0,99</strong>. Objem je zhruba dvojnásobný, pretože BigQuery obsahuje <strong>balíkové aj štandardné</strong> zásielky, kým OLAP len jednu vetvu — pred prepnutím zdroja to treba zohľadniť (inak model uvidí skokovú zmenu úrovne a treba zadať zlom).</p>
+<p>Stĺpec <code>Date</code> je deň reálneho odchodu; hodnoty 9900-12-31 a 1899-12-31 znamenajú „ešte neodišlo“ a „neznáme“.</p>
+
+<h3>Typy zásielok</h3>
+<p>Rozpad Balíkový verzus Standard (aktuálne 51,5 % ku 48,5 %) sa zobrazuje v <strong>Perfe</strong>. Obe skupiny majú rôznu prácnosť, takže ide o prvý krok k presnejšiemu kapacitnému prepočtu.</p>
+
+<h3>Marketing Cycle Plan — otestované, nezapracované</h3>
+<p>Intenzita marketingových kampaní bola zmeraná proti odchýlke skutočnosti od modelu na 206 dňoch mimo obdobia nábehu. <strong>Korelácie sú zanedbateľné</strong> (spolu +0,05, Taktiky +0,06, Image +0,09, Launche −0,04), preto do modelu nevstupuje.</p>
+<p>Pozor na falošný nález: pri zahrnutí decembra 2025 vychádza Image +0,40, ale je to artefakt — počet Image kampaní je od januára konštantne 3 a korelácia zachytáva len to, že december bol obdobím nábehu s odchýlkou −21,7 %.</p>
+
+<h3>Týždenný plán výkonov — čaká na spresnenie</h3>
+<p>Konvertor existuje, ale extrakcia zatiaľ číta nesprávne riadky: pre SKLC3 vychádza 10,5 mil. JBL na týždeň proti skutočným ~347 tis. Import preto obsahuje poistku, ktorá takéto hodnoty odmietne s vysvetlením. Na dokončenie treba určiť, ktorý blok hárku <em>2026 weeks</em> je platný plán pre jednu pobočku.</p>
+
 <h2 id="19-zname-obmedzenia">19. Známe obmedzenia</h2>
 <ol>
 <li><strong>Lead time neodpovedá deklarovanej logike.</strong> Medián od objednávky po odchod je 28–36 h; z večerných objednávok odíde tú istú noc len 6 %. Na vysvetlenie treba export s cieľovými destináciami.</li>

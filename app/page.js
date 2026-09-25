@@ -163,6 +163,7 @@ export default function Page() {
   const [dfsIn, setDfsIn] = useState([]);
   const [dfsOut, setDfsOut] = useState([]);
   const [zlomy, setZlomy] = useState([]);
+  const [typy, setTypy] = useState([]);
   const [pobocky, setPobocky] = useState([]);
   const [pobocka, setPobocka] = useState(null);
   const [manazeri, setManazeri] = useState([]);
@@ -258,6 +259,7 @@ export default function Page() {
       loadMut("dfs_in.csv", setDfsIn);
       loadMut("dfs_out.csv", setDfsOut);
       loadMut("zlomy.csv", setZlomy);
+      loadMut("typy_zasielok.csv", setTypy);
       loadMut("manazeri.csv", setManazeri);
       fetch("/api/heslo").then((r) => r.json()).then((j) => setChranene(Boolean(j.chranene))).catch(() => {});
       try { const h = sessionStorage.getItem("vykony-heslo"); if (h) setHeslo(h); } catch {}
@@ -510,7 +512,7 @@ export default function Page() {
       )}
       {tab === "dfs" && <TabDfs dfsIn={dfsIn} dfsOut={dfsOut} uda={uda} vynimky={vynimky} udalosti={udalosti} pobocka={pobocka} />}
       {tab === "prehlad" && <TabPrehlad pobocka={pobocka} dfsIn={dfsIn} V={V} TP={TP} staticData={staticData} uda={uda} vynimky={vynimky} backlogy={backlogy} emaily={emaily} show={show} kpi={kpi} prahy={prahy} upozAktivne={upozAktivne} />}
-      {tab === "zataz" && <TabZataz manhours={manhours} V={V} TP={TP} staticData={staticData} uda={uda} kpi={kpi} backlogy={backlogy} prahy={prahy} />}
+      {tab === "zataz" && <TabZataz typy={typy} manhours={manhours} V={V} TP={TP} staticData={staticData} uda={uda} kpi={kpi} backlogy={backlogy} prahy={prahy} />}
       {tab === "kvalita" && <TabKvalita staticData={staticData} prahy={prahy} />}
       {tab === "zmeny" && <TabZmeny pobocka={pobocka} staticData={staticData} zmeny={zmeny} setZmeny={setZmeny} manazeri={manazeri} save={save} prahy={prahy} />}
       {tab === "admin" && <TabVykony manhours={manhours} kpi={kpi} setKpi={setKpi} save={save} emaily={emaily} setEmaily={setEmaily} prahyR={prahyR} setPrahy={setPrahy} prahy={prahy} chranene={chranene} heslo={heslo} setHeslo={setHeslo} show={show} />}
@@ -1239,7 +1241,7 @@ function TabPrehlad({ V, TP, staticData, uda, vynimky, backlogy, emaily, show, k
 // ------------------------------------------------------------ Perfo
 // Koľko treba dnes odoslať: väčšina objemu vznikla v predchádzajúcich dňoch
 // a je teda už známa – neodhaduje sa, počíta sa z matice zvozov.
-function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
+function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours, typy }) {
   const zvozProfil = staticData.zvozProfil || [];
   const [datum, setDatum] = useState(today());
   const actual = useMemo(() => new Map(V.daily.map((r) => [r.datum, r.jbl])), [V.daily]);
@@ -1346,6 +1348,26 @@ function TabZataz({ V, TP, staticData, uda, kpi, backlogy, prahy, manhours }) {
           </tbody>
         </table>
       </div>
+
+      {(() => {
+        const t30 = (typy || []).filter((r) => r.datum >= addDays(datum, -30) && r.datum <= datum);
+        if (!t30.length) return null;
+        const spolu30 = t30.reduce((a, r) => a + (+r.joblines || 0), 0);
+        const podla = {};
+        for (const r of t30) podla[r.typ] = (podla[r.typ] || 0) + (+r.joblines || 0);
+        return (
+          <div className="section">
+            <h3>{t("Typy zásielok")} · {t("posledných 30 dní")}</h3>
+            <div className="grid g4">
+              {Object.entries(podla).sort((a, b) => b[1] - a[1]).map(([nazov, v]) => (
+                <Card key={nazov} lbl={nazov} val={nf1.format((v / spolu30) * 100) + " %"}
+                  sub={`${nf.format(v / t30.filter((r) => r.typ === nazov).length)} ${t("JBL/deň priemer")}`} />
+              ))}
+            </div>
+            <p className="note">{t("Balíkové a štandardné zásielky majú rôznu prácnosť – rozpad slúži na presnejší odhad kapacity.")}</p>
+          </div>
+        );
+      })()}
 
       <div className="section">
         <h3>{t("Odchody zvozov počas dňa")}</h3>
@@ -2151,7 +2173,7 @@ function TabImport({ saveRaw, saveRawDo, nacitajRaw, pobocka, show, ghOk }) {
       const { detekuj, prevod, POPIS_TYPU } = await import("../lib/importuj");
       for (const f of files) {
         try {
-          const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+          const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true, codepage: 65001 });
           // zošit môže obsahovať viac hárkov (napr. VOLUMES a QUALITY vedľa seba)
           const subory = {}; const typy = []; const suhrny = [];
           for (const meno of wb.SheetNames) {
